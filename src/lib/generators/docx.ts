@@ -72,8 +72,12 @@ export async function generateDocx(resume: StructuredResume): Promise<Buffer> {
               spacing: { before: 200 },
             }),
             new Paragraph({
-              text: exp.dates,
-              italics: true,
+              children: [
+                new TextRun({
+                  text: exp.dates,
+                  italics: true,
+                }),
+              ],
               spacing: { after: 100 },
             }),
             ...exp.bullets.map((bullet) => 
@@ -108,8 +112,12 @@ export async function generateDocx(resume: StructuredResume): Promise<Buffer> {
               ],
             }),
             new Paragraph({
-              text: edu.dates,
-              italics: true,
+              children: [
+                new TextRun({
+                  text: edu.dates,
+                  italics: true,
+                }),
+              ],
               spacing: { after: edu.details ? 100 : 200 },
             }),
             ...(edu.details ? [
