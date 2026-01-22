@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { createClient } from '@/lib/supabase/client';
 import { Application, Resume, StructuredResume } from '@/types';
 
-export default function RefinePage() {
+function RefinePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationId = searchParams.get('id');
@@ -436,5 +436,13 @@ function Input({ type, accept, onChange, disabled, className }: any) {
       disabled={disabled}
       className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ${className}`}
     />
+  );
+}
+
+export default function RefinePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <RefinePageContent />
+    </Suspense>
   );
 }
