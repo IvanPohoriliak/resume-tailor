@@ -255,7 +255,7 @@ export default function RefinePage() {
                     />
                     {resume && (
                       <div className="text-sm text-green-600">
-                        ✓ Resume uploaded: {resume.contact?.name || 'Unnamed'}
+                        ✓ Resume uploaded: {resume.structured?.contact?.name || 'Unnamed'}
                       </div>
                     )}
                     {uploading && <div className="text-sm text-gray-500">Uploading...</div>}
