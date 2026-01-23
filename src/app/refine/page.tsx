@@ -214,8 +214,13 @@ function RefinePageContent() {
   };
 
   const handleRewrite = async (instruction: string) => {
-    if (!editText || !jobDescription) return;
+    if (!editText || !jobDescription) {
+      console.log('Cannot rewrite: missing editText or jobDescription');
+      setRewriteError('Missing text or job description');
+      return;
+    }
 
+    console.log('Starting rewrite with instruction:', instruction);
     setRewriteLoading(true);
     setRewriteError(null);
 
@@ -230,15 +235,23 @@ function RefinePageContent() {
         }),
       });
 
+      console.log('Rewrite response status:', response.status);
       const data = await response.json();
+      console.log('Rewrite response data:', data);
 
       if (!response.ok) {
-        setRewriteError(data.error || 'Failed to rewrite text');
+        const errorMsg = data.error || 'Failed to rewrite text';
+        console.error('Rewrite failed:', errorMsg);
+        setRewriteError(errorMsg);
         return;
       }
 
       if (data.rewritten) {
+        console.log('Rewrite successful, updating text');
         setEditText(data.rewritten);
+      } else {
+        console.warn('No rewritten text in response');
+        setRewriteError('No rewritten text received');
       }
     } catch (error) {
       console.error('Rewrite error:', error);
@@ -471,13 +484,12 @@ function RefinePageContent() {
                                         )}
                                       </div>
                                     ) : (
-                                      <div className="flex items-start gap-2 group">
+                                      <div className="flex items-start gap-2">
                                         <span className="flex-shrink-0">•</span>
                                         <span className="flex-1">{bullet}</span>
                                         <Button
                                           size="sm"
                                           variant="ghost"
-                                          className="opacity-0 group-hover:opacity-100 transition-opacity"
                                           onClick={() => handleEdit(sectionId, bullet)}
                                         >
                                           Edit
@@ -544,12 +556,11 @@ function RefinePageContent() {
                                         )}
                                       </div>
                                     ) : (
-                                      <div className="flex items-start gap-2 group">
+                                      <div className="flex items-start gap-2">
                                         <p className="text-sm flex-1">{edu.details}</p>
                                         <Button
                                           size="sm"
                                           variant="ghost"
-                                          className="opacity-0 group-hover:opacity-100 transition-opacity"
                                           onClick={() => handleEdit(sectionId, edu.details || '')}
                                         >
                                           Edit
