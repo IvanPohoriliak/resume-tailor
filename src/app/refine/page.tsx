@@ -198,6 +198,13 @@ function RefinePageContent() {
         ...updatedResume.education[eduIndex],
         details: editText
       };
+    } else if (editingSection === 'skills') {
+      // Parse skills from comma or bullet-separated text
+      const skillsArray = editText
+        .split(/[,•]/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      updatedResume.skills = skillsArray;
     }
 
     setTailoredResume(updatedResume);
@@ -572,6 +579,60 @@ function RefinePageContent() {
                               </div>
                             );
                           })}
+                        </div>
+                      )}
+
+                      {/* Skills */}
+                      {tailoredResume.skills && tailoredResume.skills.length > 0 && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-bold">SKILLS</h3>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEdit('skills', tailoredResume.skills.join(', '))}
+                            >
+                              Edit
+                            </Button>
+                          </div>
+                          {editingSection === 'skills' ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                className="min-h-[100px]"
+                                placeholder="Enter skills separated by commas (e.g., React, TypeScript, Node.js)"
+                              />
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={handleSaveEdit}>
+                                  Save
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRewrite('more impactful')}
+                                  disabled={rewriteLoading}
+                                >
+                                  {rewriteLoading ? 'Rewriting...' : 'AI Rewrite'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setEditingSection(null);
+                                    setRewriteError(null);
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                              {rewriteError && (
+                                <p className="text-sm text-red-600">{rewriteError}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-sm">{tailoredResume.skills.join(' • ')}</p>
+                          )}
                         </div>
                       )}
 
