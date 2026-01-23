@@ -70,18 +70,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Get signed URL for private bucket (expires in 1 hour)
-    const { data: { signedUrl }, error: urlError } = await supabase.storage
+    const { data, error: urlError } = await supabase.storage
       .from('resumes')
       .createSignedUrl(filePath, 3600); // 1 hour expiry
 
-    if (urlError || !signedUrl) {
+    if (urlError || !data?.signedUrl) {
       console.error('URL error:', urlError);
       return NextResponse.json({ error: 'Failed to generate download URL' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
-      url: signedUrl,
-      filename 
+    return NextResponse.json({
+      url: data.signedUrl,
+      filename
     });
   } catch (error) {
     console.error('Document generation error:', error);
