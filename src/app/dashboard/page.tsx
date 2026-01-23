@@ -149,11 +149,11 @@ export default function DashboardPage() {
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">
-                          {app.jobMetadata.role || 'Position'}
+                          {app.jobMetadata?.role || 'Position'}
                         </h3>
                         <p className="text-gray-600">
-                          {app.jobMetadata.company || 'Company'} 
-                          {app.jobMetadata.location && ` • ${app.jobMetadata.location}`}
+                          {app.jobMetadata?.company || 'Company'}
+                          {app.jobMetadata?.location && ` • ${app.jobMetadata?.location}`}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
