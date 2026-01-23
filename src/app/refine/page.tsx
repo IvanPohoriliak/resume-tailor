@@ -496,8 +496,9 @@ function RefinePageContent() {
                                         <span className="flex-1">{bullet}</span>
                                         <Button
                                           size="sm"
-                                          variant="ghost"
+                                          variant="outline"
                                           onClick={() => handleEdit(sectionId, bullet)}
+                                          className="flex-shrink-0"
                                         >
                                           Edit
                                         </Button>
@@ -567,8 +568,9 @@ function RefinePageContent() {
                                         <p className="text-sm flex-1">{edu.details}</p>
                                         <Button
                                           size="sm"
-                                          variant="ghost"
+                                          variant="outline"
                                           onClick={() => handleEdit(sectionId, edu.details || '')}
+                                          className="flex-shrink-0"
                                         >
                                           Edit
                                         </Button>
