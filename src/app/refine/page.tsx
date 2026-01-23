@@ -173,15 +173,35 @@ function RefinePageContent() {
     if (!tailoredResume || !editingSection) return;
 
     const updatedResume = { ...tailoredResume };
-    
+
     if (editingSection === 'summary') {
       updatedResume.summary = editText;
+    } else if (editingSection.startsWith('experience-')) {
+      // Handle experience bullet editing: experience-${expIdx}-bullet-${bulletIdx}
+      const match = editingSection.match(/experience-(\d+)-bullet-(\d+)/);
+      if (match) {
+        const expIdx = parseInt(match[1]);
+        const bulletIdx = parseInt(match[2]);
+        updatedResume.experience[expIdx].bullets[bulletIdx] = editText;
+      }
+    } else if (editingSection.startsWith('education-')) {
+      // Handle education editing: education-${eduIdx}
+      const match = editingSection.match(/education-(\d+)/);
+      if (match) {
+        const eduIdx = parseInt(match[1]);
+        // Parse the edited text to update education entry
+        // For simplicity, we'll just update the entire education entry as a concatenated text
+        // In a real implementation, you might want to parse individual fields
+        updatedResume.education[eduIdx].details = editText;
+      }
+    } else if (editingSection === 'skills') {
+      // Handle skills editing - convert text to array
+      updatedResume.skills = editText.split('•').map(s => s.trim()).filter(Boolean);
     }
-    // Add more section handling as needed
 
     setTailoredResume(updatedResume);
     setEditingSection(null);
-    
+
     // Update in database if needed
     if (currentApplicationId) {
       await fetch(`/api/application/${currentApplicationId}`, {
@@ -382,8 +402,8 @@ function RefinePageContent() {
                       {/* Experience */}
                       <div>
                         <h3 className="font-bold mb-3">EXPERIENCE</h3>
-                        {tailoredResume.experience.map((exp, idx) => (
-                          <div key={idx} className="mb-4">
+                        {tailoredResume.experience.map((exp, expIdx) => (
+                          <div key={expIdx} className="mb-4">
                             <div className="flex justify-between">
                               <div>
                                 <p className="font-semibold">{exp.role}</p>
@@ -392,13 +412,165 @@ function RefinePageContent() {
                               <p className="text-sm text-gray-600">{exp.dates}</p>
                             </div>
                             <ul className="list-disc list-inside mt-2 space-y-1">
-                              {exp.bullets.map((bullet, bidx) => (
-                                <li key={bidx} className="text-sm">{bullet}</li>
-                              ))}
+                              {exp.bullets.map((bullet, bulletIdx) => {
+                                const sectionId = `experience-${expIdx}-bullet-${bulletIdx}`;
+                                return (
+                                  <li key={bulletIdx} className="text-sm">
+                                    {editingSection === sectionId ? (
+                                      <div className="space-y-2 ml-[-1.5rem]">
+                                        <Textarea
+                                          value={editText}
+                                          onChange={(e) => setEditText(e.target.value)}
+                                          className="min-h-[80px]"
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button size="sm" onClick={handleSaveEdit}>
+                                            Save
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleRewrite('more impactful')}
+                                          >
+                                            AI Rewrite
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => setEditingSection(null)}
+                                          >
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="group relative">
+                                        {bullet}
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="ml-2 h-6 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          onClick={() => handleEdit(sectionId, bullet)}
+                                        >
+                                          Edit
+                                        </Button>
+                                      </span>
+                                    )}
+                                  </li>
+                                );
+                              })}
                             </ul>
                           </div>
                         ))}
                       </div>
+
+                      {/* Education */}
+                      {tailoredResume.education && tailoredResume.education.length > 0 && (
+                        <div>
+                          <h3 className="font-bold mb-3">EDUCATION</h3>
+                          {tailoredResume.education.map((edu, eduIdx) => {
+                            const sectionId = `education-${eduIdx}`;
+                            return (
+                              <div key={eduIdx} className="mb-4">
+                                {editingSection === sectionId ? (
+                                  <div className="space-y-2">
+                                    <Textarea
+                                      value={editText}
+                                      onChange={(e) => setEditText(e.target.value)}
+                                      className="min-h-[100px]"
+                                    />
+                                    <div className="flex gap-2">
+                                      <Button size="sm" onClick={handleSaveEdit}>
+                                        Save
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleRewrite('more impactful')}
+                                      >
+                                        AI Rewrite
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setEditingSection(null)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="group relative">
+                                    <div className="flex justify-between">
+                                      <div>
+                                        <p className="font-semibold">{edu.degree}</p>
+                                        <p className="text-sm text-gray-600">{edu.school}</p>
+                                      </div>
+                                      <p className="text-sm text-gray-600">{edu.dates}</p>
+                                    </div>
+                                    {edu.details && <p className="text-sm mt-1">{edu.details}</p>}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={() => handleEdit(sectionId, edu.details || '')}
+                                    >
+                                      Edit
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Skills */}
+                      {tailoredResume.skills && tailoredResume.skills.length > 0 && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-bold">SKILLS</h3>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEdit('skills', tailoredResume.skills.join(' • '))}
+                            >
+                              Edit
+                            </Button>
+                          </div>
+                          {editingSection === 'skills' ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                className="min-h-[80px]"
+                                placeholder="Separate skills with • symbol"
+                              />
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={handleSaveEdit}>
+                                  Save
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRewrite('more relevant to job')}
+                                >
+                                  AI Rewrite
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingSection(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm">{tailoredResume.skills.join(' • ')}</p>
+                          )}
+                        </div>
+                      )}
 
                       {/* Download Buttons */}
                       <div className="flex gap-3 pt-4 border-t">
