@@ -69,13 +69,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to save document' }, { status: 500 });
     }
 
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
+    // Get signed URL for private bucket (expires in 1 hour)
+    const { data: { signedUrl }, error: urlError } = await supabase.storage
       .from('resumes')
-      .getPublicUrl(filePath);
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+    if (urlError || !signedUrl) {
+      console.error('URL error:', urlError);
+      return NextResponse.json({ error: 'Failed to generate download URL' }, { status: 500 });
+    }
 
     return NextResponse.json({ 
-      url: publicUrl,
+      url: signedUrl,
       filename 
     });
   } catch (error) {
