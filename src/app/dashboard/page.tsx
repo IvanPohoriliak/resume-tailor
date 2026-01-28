@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import { createClient } from '@/lib/supabase/client';
 
 interface ApplicationFromDB {
@@ -24,6 +25,7 @@ interface ApplicationFromDB {
     missing: string[];
   };
   status: 'applied' | 'screening' | 'interview' | 'rejected' | 'offer';
+  notes?: string;
   applied_date?: string;
   created_at: string;
   updated_at: string;
@@ -34,6 +36,8 @@ export default function DashboardPage() {
   const [applications, setApplications] = useState<ApplicationFromDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [notesText, setNotesText] = useState('');
 
   useEffect(() => {
     checkUser();
@@ -66,6 +70,33 @@ export default function DashboardPage() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/');
+  };
+
+  const updateStatus = async (appId: string, newStatus: string) => {
+    try {
+      await fetch(`/api/application/${appId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      fetchApplications();
+    } catch (error) {
+      console.error('Error updating status:', error);
+    }
+  };
+
+  const saveNotes = async (appId: string) => {
+    try {
+      await fetch(`/api/application/${appId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: notesText }),
+      });
+      setEditingNotes(null);
+      fetchApplications();
+    } catch (error) {
+      console.error('Error saving notes:', error);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -131,7 +162,7 @@ export default function DashboardPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Stats Cards - Modern Design */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-3 gap-6 mb-8">
           <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
@@ -223,7 +254,7 @@ export default function DashboardPage() {
                     key={app.id}
                     className="border border-gray-200 rounded-lg p-5 hover:border-blue-300 hover:shadow-sm transition-all bg-white"
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4 mb-3">
                       {/* Left: Job Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-3">
@@ -246,9 +277,18 @@ export default function DashboardPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-3 mt-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(app.status)}`}>
-                                {app.status}
-                              </span>
+                              {/* Status Dropdown */}
+                              <select
+                                value={app.status}
+                                onChange={(e) => updateStatus(app.id, e.target.value)}
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border cursor-pointer ${getStatusColor(app.status)}`}
+                              >
+                                <option value="applied">applied</option>
+                                <option value="screening">screening</option>
+                                <option value="interview">interview</option>
+                                <option value="rejected">rejected</option>
+                                <option value="offer">offer</option>
+                              </select>
                               <span className="text-xs text-gray-500">
                                 {new Date(app.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                               </span>
@@ -264,28 +304,71 @@ export default function DashboardPage() {
                             View
                           </Button>
                         </Link>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-gray-600 hover:text-gray-900"
-                          onClick={async () => {
-                            const newStatus = prompt('Enter new status (applied/screening/interview/rejected/offer):', app.status);
-                            if (newStatus && ['applied', 'screening', 'interview', 'rejected', 'offer'].includes(newStatus)) {
-                              await fetch(`/api/application/${app.id}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: newStatus }),
-                              });
-                              fetchApplications();
-                            }
-                          }}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                          </svg>
-                        </Button>
                       </div>
                     </div>
+
+                    {/* Notes Section */}
+                    {editingNotes === app.id ? (
+                      <div className="mt-3 space-y-2">
+                        <Textarea
+                          value={notesText}
+                          onChange={(e) => setNotesText(e.target.value)}
+                          placeholder="Add notes about this application..."
+                          className="min-h-[80px] text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => saveNotes(app.id)}>
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingNotes(null);
+                              setNotesText('');
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        {app.notes ? (
+                          <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700">
+                            <div className="flex justify-between items-start gap-2">
+                              <p className="whitespace-pre-wrap flex-1">{app.notes}</p>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-gray-500 hover:text-gray-700 flex-shrink-0"
+                                onClick={() => {
+                                  setEditingNotes(app.id);
+                                  setNotesText(app.notes || '');
+                                }}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-gray-500 hover:text-gray-700"
+                            onClick={() => {
+                              setEditingNotes(app.id);
+                              setNotesText('');
+                            }}
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add notes
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
