@@ -26,6 +26,7 @@ function RefinePageContent() {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [currentApplicationId, setCurrentApplicationId] = useState<string | null>(null);
+  const [rewriting, setRewriting] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -177,7 +178,6 @@ function RefinePageContent() {
     if (editingSection === 'summary') {
       updatedResume.summary = editText;
     } else if (editingSection.startsWith('experience-')) {
-      // Handle experience bullet editing: experience-${expIdx}-bullet-${bulletIdx}
       const match = editingSection.match(/experience-(\d+)-bullet-(\d+)/);
       if (match) {
         const expIdx = parseInt(match[1]);
@@ -185,24 +185,18 @@ function RefinePageContent() {
         updatedResume.experience[expIdx].bullets[bulletIdx] = editText;
       }
     } else if (editingSection.startsWith('education-')) {
-      // Handle education editing: education-${eduIdx}
       const match = editingSection.match(/education-(\d+)/);
       if (match) {
         const eduIdx = parseInt(match[1]);
-        // Parse the edited text to update education entry
-        // For simplicity, we'll just update the entire education entry as a concatenated text
-        // In a real implementation, you might want to parse individual fields
         updatedResume.education[eduIdx].details = editText;
       }
     } else if (editingSection === 'skills') {
-      // Handle skills editing - convert text to array
       updatedResume.skills = editText.split('•').map(s => s.trim()).filter(Boolean);
     }
 
     setTailoredResume(updatedResume);
     setEditingSection(null);
 
-    // Update in database if needed
     if (currentApplicationId) {
       await fetch(`/api/application/${currentApplicationId}`, {
         method: 'PATCH',
@@ -215,6 +209,7 @@ function RefinePageContent() {
   const handleRewrite = async (instruction: string) => {
     if (!editText || !jobDescription) return;
 
+    setRewriting(true);
     try {
       const response = await fetch('/api/ai/rewrite', {
         method: 'POST',
@@ -232,12 +227,14 @@ function RefinePageContent() {
       }
     } catch (error) {
       console.error('Rewrite error:', error);
+      alert('Error rewriting text');
+    } finally {
+      setRewriting(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold text-blue-600">
@@ -258,7 +255,6 @@ function RefinePageContent() {
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Left Column - Input */}
             <div className="space-y-6">
-              {/* Upload Resume */}
               <Card>
                 <CardHeader>
                   <CardTitle>1. Upload Master Resume</CardTitle>
@@ -283,7 +279,6 @@ function RefinePageContent() {
                 </CardContent>
               </Card>
 
-              {/* Job Description */}
               <Card>
                 <CardHeader>
                   <CardTitle>2. Paste Job Description</CardTitle>
@@ -299,7 +294,6 @@ function RefinePageContent() {
                 </CardContent>
               </Card>
 
-              {/* Tailor Button */}
               <Button
                 onClick={handleTailorResume}
                 disabled={loading || !resume || !jobDescription}
@@ -338,7 +332,7 @@ function RefinePageContent() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Preview & Edit</CardTitle>
-                      <CardDescription>Click any section to edit</CardDescription>
+                      <CardDescription>Click Edit on any section to modify</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {/* Contact */}
@@ -358,13 +352,15 @@ function RefinePageContent() {
                         <div>
                           <div className="flex justify-between items-center mb-2">
                             <h3 className="font-bold">PROFESSIONAL SUMMARY</h3>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit('summary', tailoredResume.summary!)}
-                            >
-                              Edit
-                            </Button>
+                            {editingSection !== 'summary' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit('summary', tailoredResume.summary!)}
+                              >
+                                Edit
+                              </Button>
+                            )}
                           </div>
                           {editingSection === 'summary' ? (
                             <div className="space-y-2">
@@ -373,7 +369,7 @@ function RefinePageContent() {
                                 onChange={(e) => setEditText(e.target.value)}
                                 className="min-h-[100px]"
                               />
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 flex-wrap">
                                 <Button size="sm" onClick={handleSaveEdit}>
                                   Save
                                 </Button>
@@ -381,8 +377,25 @@ function RefinePageContent() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleRewrite('more impactful')}
+                                  disabled={rewriting}
                                 >
-                                  AI Rewrite
+                                  {rewriting ? 'Rewriting...' : '✨ More Impactful'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRewrite('more technical')}
+                                  disabled={rewriting}
+                                >
+                                  {rewriting ? 'Rewriting...' : '🔧 More Technical'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRewrite('more concise')}
+                                  disabled={rewriting}
+                                >
+                                  {rewriting ? 'Rewriting...' : '✂️ More Concise'}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -411,19 +424,19 @@ function RefinePageContent() {
                               </div>
                               <p className="text-sm text-gray-600">{exp.dates}</p>
                             </div>
-                            <ul className="list-disc list-inside mt-2 space-y-1">
+                            <ul className="list-disc list-inside mt-2 space-y-2">
                               {exp.bullets.map((bullet, bulletIdx) => {
                                 const sectionId = `experience-${expIdx}-bullet-${bulletIdx}`;
                                 return (
                                   <li key={bulletIdx} className="text-sm">
                                     {editingSection === sectionId ? (
-                                      <div className="space-y-2 ml-[-1.5rem]">
+                                      <div className="space-y-2 ml-[-20px]">
                                         <Textarea
                                           value={editText}
                                           onChange={(e) => setEditText(e.target.value)}
-                                          className="min-h-[80px]"
+                                          className="min-h-[60px]"
                                         />
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 flex-wrap">
                                           <Button size="sm" onClick={handleSaveEdit}>
                                             Save
                                           </Button>
@@ -431,8 +444,17 @@ function RefinePageContent() {
                                             size="sm"
                                             variant="outline"
                                             onClick={() => handleRewrite('more impactful')}
+                                            disabled={rewriting}
                                           >
-                                            AI Rewrite
+                                            {rewriting ? 'Rewriting...' : '✨ More Impactful'}
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleRewrite('more quantifiable')}
+                                            disabled={rewriting}
+                                          >
+                                            {rewriting ? 'Rewriting...' : '📊 More Quantifiable'}
                                           </Button>
                                           <Button
                                             size="sm"
@@ -444,17 +466,17 @@ function RefinePageContent() {
                                         </div>
                                       </div>
                                     ) : (
-                                      <span className="group relative">
-                                        {bullet}
+                                      <div className="flex justify-between items-start group">
+                                        <span>{bullet}</span>
                                         <Button
                                           size="sm"
                                           variant="ghost"
-                                          className="ml-2 h-6 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity ml-2"
                                           onClick={() => handleEdit(sectionId, bullet)}
                                         >
                                           Edit
                                         </Button>
-                                      </span>
+                                      </div>
                                     )}
                                   </li>
                                 );
@@ -471,24 +493,18 @@ function RefinePageContent() {
                           {tailoredResume.education.map((edu, eduIdx) => {
                             const sectionId = `education-${eduIdx}`;
                             return (
-                              <div key={eduIdx} className="mb-4">
+                              <div key={eduIdx} className="mb-3">
                                 {editingSection === sectionId ? (
                                   <div className="space-y-2">
                                     <Textarea
                                       value={editText}
                                       onChange={(e) => setEditText(e.target.value)}
-                                      className="min-h-[100px]"
+                                      className="min-h-[80px]"
+                                      placeholder="Edit education details..."
                                     />
                                     <div className="flex gap-2">
                                       <Button size="sm" onClick={handleSaveEdit}>
                                         Save
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleRewrite('more impactful')}
-                                      >
-                                        AI Rewrite
                                       </Button>
                                       <Button
                                         size="sm"
@@ -500,23 +516,22 @@ function RefinePageContent() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="group relative">
-                                    <div className="flex justify-between">
+                                  <div className="group">
+                                    <div className="flex justify-between items-start">
                                       <div>
-                                        <p className="font-semibold">{edu.degree}</p>
-                                        <p className="text-sm text-gray-600">{edu.school}</p>
+                                        <p className="font-semibold">{edu.degree} | {edu.school}</p>
+                                        <p className="text-sm text-gray-600">{edu.dates}</p>
+                                        {edu.details && <p className="text-sm mt-1">{edu.details}</p>}
                                       </div>
-                                      <p className="text-sm text-gray-600">{edu.dates}</p>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => handleEdit(sectionId, edu.details || `${edu.degree} at ${edu.school}`)}
+                                      >
+                                        Edit
+                                      </Button>
                                     </div>
-                                    {edu.details && <p className="text-sm mt-1">{edu.details}</p>}
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      onClick={() => handleEdit(sectionId, edu.details || '')}
-                                    >
-                                      Edit
-                                    </Button>
                                   </div>
                                 )}
                               </div>
@@ -530,13 +545,15 @@ function RefinePageContent() {
                         <div>
                           <div className="flex justify-between items-center mb-2">
                             <h3 className="font-bold">SKILLS</h3>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit('skills', tailoredResume.skills.join(' • '))}
-                            >
-                              Edit
-                            </Button>
+                            {editingSection !== 'skills' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit('skills', tailoredResume.skills.join(' • '))}
+                              >
+                                Edit
+                              </Button>
+                            )}
                           </div>
                           {editingSection === 'skills' ? (
                             <div className="space-y-2">
@@ -544,18 +561,11 @@ function RefinePageContent() {
                                 value={editText}
                                 onChange={(e) => setEditText(e.target.value)}
                                 className="min-h-[80px]"
-                                placeholder="Separate skills with • symbol"
+                                placeholder="Separate skills with • (bullet)"
                               />
                               <div className="flex gap-2">
                                 <Button size="sm" onClick={handleSaveEdit}>
                                   Save
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleRewrite('more relevant to job')}
-                                >
-                                  AI Rewrite
                                 </Button>
                                 <Button
                                   size="sm"
