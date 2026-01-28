@@ -6,11 +6,33 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/client';
-import { Application } from '@/types';
+
+// Raw type from Supabase (snake_case)
+interface ApplicationFromDB {
+  id: string;
+  user_id: string;
+  resume_id: string;
+  job_description: string;
+  job_metadata: {
+    role?: string;
+    company?: string;
+    location?: string;
+  };
+  tailored_resume: any;
+  ats_score: number;
+  keywords: {
+    matched: string[];
+    missing: string[];
+  };
+  status: 'applied' | 'screening' | 'interview' | 'rejected' | 'offer';
+  applied_date?: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [applications, setApplications] = useState<Application[]>([]);
+  const [applications, setApplications] = useState<ApplicationFromDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
@@ -149,17 +171,17 @@ export default function DashboardPage() {
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">
-                          {app.jobMetadata?.role || 'Position'}
+                          {app.job_metadata?.role || 'Position'}
                         </h3>
                         <p className="text-gray-600">
-                          {app.jobMetadata?.company || 'Company'}
-                          {app.jobMetadata?.location && ` • ${app.jobMetadata?.location}`}
+                          {app.job_metadata?.company || 'Company'}
+                          {app.job_metadata?.location && ` • ${app.job_metadata.location}`}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <div className="text-sm font-medium">
-                            ATS Score: {app.atsScore}%
+                            ATS Score: {app.ats_score}%
                           </div>
                           <div className={`text-xs px-2 py-1 rounded-full inline-block ${getStatusColor(app.status)}`}>
                             {app.status}
@@ -192,7 +214,7 @@ export default function DashboardPage() {
                       </Button>
                     </div>
                     <div className="text-xs text-gray-500 mt-2">
-                      Created: {new Date(app.createdAt).toLocaleDateString()}
+                      Created: {new Date(app.created_at).toLocaleDateString()}
                     </div>
                   </div>
                 ))}
