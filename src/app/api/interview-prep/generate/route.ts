@@ -74,15 +74,21 @@ export async function POST(request: NextRequest) {
 
     // Parse AI response
     let questions;
+    let parsed;
     try {
-      const parsed = JSON.parse(responseText);
+      parsed = JSON.parse(responseText);
       questions = Array.isArray(parsed) ? parsed : parsed.questions || [];
+      
+      // Debug log
+      console.log('AI Response:', responseText.substring(0, 200));
+      console.log('Parsed questions count:', questions.length);
     } catch (parseError) {
       console.error('Failed to parse AI response:', responseText);
       return NextResponse.json({ error: 'Invalid AI response format' }, { status: 500 });
     }
 
     if (!Array.isArray(questions) || questions.length === 0) {
+      console.error('No questions in response. Parsed:', JSON.stringify(parsed).substring(0, 500));
       return NextResponse.json({ error: 'No questions generated' }, { status: 500 });
     }
 

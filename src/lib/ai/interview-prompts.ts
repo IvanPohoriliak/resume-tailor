@@ -24,14 +24,21 @@ Make questions:
 - Relevant to candidate's background
 - Realistic (not generic textbook questions)
 
-Return as JSON array:
-[
-  {
-    "type": "behavioral",
-    "question": "..."
-  },
-  ...
-]`,
+Return as JSON object with this exact format:
+{
+  "questions": [
+    {
+      "type": "behavioral",
+      "question": "Tell me about a time when..."
+    },
+    {
+      "type": "technical",
+      "question": "How would you approach..."
+    }
+  ]
+}
+
+IMPORTANT: Return ONLY valid JSON, no other text.`,
 
   // Analyze a single answer
   ANALYZE_ANSWER: `You are a senior interview coach evaluating a candidate's answer.
