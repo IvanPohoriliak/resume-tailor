@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -69,7 +70,11 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push('/');
+    
+    // Clear state and force reload
+    setApplications([]);
+    setUser(null);
+    window.location.href = '/';
   };
 
   const updateStatus = async (appId: string, newStatus: string) => {
@@ -96,6 +101,30 @@ export default function DashboardPage() {
       fetchApplications();
     } catch (error) {
       console.error('Error saving notes:', error);
+    }
+  };
+
+  const deleteApplication = async (appId: string) => {
+    if (!confirm('Delete this application and all interview sessions? This cannot be undone.')) {
+      return;
+    }
+
+    setDeleting(appId);
+    try {
+      const response = await fetch(`/api/application/${appId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        fetchApplications();
+      } else {
+        alert('Failed to delete application');
+      }
+    } catch (error) {
+      console.error('Error deleting application:', error);
+      alert('Error deleting application');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -144,7 +173,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Modern Header */}
+      {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
@@ -304,6 +333,20 @@ export default function DashboardPage() {
                             View
                           </Button>
                         </Link>
+                        <Link href={`/interview-prep?applicationId=${app.id}`}>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+                            Interview
+                          </Button>
+                        </Link>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => deleteApplication(app.id)}
+                          disabled={deleting === app.id}
+                        >
+                          {deleting === app.id ? '...' : '🗑️'}
+                        </Button>
                       </div>
                     </div>
 
