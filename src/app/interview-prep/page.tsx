@@ -120,7 +120,7 @@ function InterviewPrepContent() {
       setCurrentIndex(currentIndex + 1);
     } else {
       // All questions done - generate final summary
-      completSession();
+      completeSession();
     }
   };
 
