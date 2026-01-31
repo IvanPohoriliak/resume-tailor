@@ -126,7 +126,12 @@ Return JSON with: { tailored_resume: {...}, matched_keywords: [], missing_keywor
     }
 
     const aiResponse = JSON.parse(responseText);
-    const tailoredResume = aiResponse.tailored_resume || resume.structured;
+    
+    // Merge AI response with original resume to preserve all fields (contact, education, etc.)
+    const tailoredResume = aiResponse.tailored_resume 
+      ? { ...resume.structured, ...aiResponse.tailored_resume }
+      : resume.structured;
+    
     const matchedKeywords = aiResponse.matched_keywords || [];
     const missingKeywords = aiResponse.missing_keywords || [];
 
@@ -150,7 +155,7 @@ Return JSON with: { tailored_resume: {...}, matched_keywords: [], missing_keywor
           url: jobData.url,
           source: jobData.source || 'extension'
         },
-        tailored_resume: tailoredResume,
+        structured: tailoredResume,
         ats_score: atsScore,
         keywords: {
           matched: matchedKeywords,
