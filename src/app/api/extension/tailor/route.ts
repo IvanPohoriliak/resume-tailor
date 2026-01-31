@@ -127,10 +127,20 @@ Return JSON with: { tailored_resume: {...}, matched_keywords: [], missing_keywor
 
     const aiResponse = JSON.parse(responseText);
     
-    // Merge AI response with original resume to preserve all fields (contact, education, etc.)
-    const tailoredResume = aiResponse.tailored_resume 
-      ? { ...resume.structured, ...aiResponse.tailored_resume }
-      : resume.structured;
+    // Use AI tailored resume but ensure it has all required fields from original
+    let tailoredResume = aiResponse.tailored_resume || resume.structured;
+    
+    // Ensure critical fields are preserved from original if missing in AI response
+    if (aiResponse.tailored_resume) {
+      tailoredResume = {
+        contact: aiResponse.tailored_resume.contact || resume.structured.contact,
+        summary: aiResponse.tailored_resume.summary || resume.structured.summary,
+        experience: aiResponse.tailored_resume.experience || resume.structured.experience,
+        education: aiResponse.tailored_resume.education || resume.structured.education,
+        skills: aiResponse.tailored_resume.skills || resume.structured.skills,
+        ...aiResponse.tailored_resume
+      };
+    }
     
     const matchedKeywords = aiResponse.matched_keywords || [];
     const missingKeywords = aiResponse.missing_keywords || [];
@@ -155,7 +165,7 @@ Return JSON with: { tailored_resume: {...}, matched_keywords: [], missing_keywor
           url: jobData.url,
           source: jobData.source || 'extension'
         },
-        structured: tailoredResume,
+        tailored_resume: tailoredResume,
         ats_score: atsScore,
         keywords: {
           matched: matchedKeywords,
