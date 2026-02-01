@@ -9,7 +9,7 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { questionId, answer } = await request.json();
+    const { sessionId, questionIndex, answer } = await request.json();
 
     if (!answer || answer.trim().length < 10) {
       return NextResponse.json({ 
@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Verify authentication
     const supabase = createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -25,22 +24,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get question
-    const { data: question, error: questionError } = await supabase
-      .from('interview_questions')
+    // Get session with questions
+    const { data: session, error: sessionError } = await supabase
+      .from('interview_sessions')
       .select('*')
-      .eq('id', questionId)
+      .eq('id', sessionId)
       .eq('user_id', user.id)
       .single();
 
-    if (questionError || !question) {
+    if (sessionError || !session) {
+      return NextResponse.json({ error: 'Сесію не знайдено' }, { status: 404 });
+    }
+
+    const questions = session.questions || [];
+    const question = questions[questionIndex];
+
+    if (!question) {
       return NextResponse.json({ error: 'Питання не знайдено' }, { status: 404 });
     }
 
     // Fill prompt with data
     const prompt = fillPrompt(INTERVIEW_PROMPTS.ANALYZE_ANSWER, {
-      QUESTION_TYPE: question.question_type,
-      QUESTION: question.question_text,
+      QUESTION_TYPE: question.type,
+      QUESTION: question.question,
       ANSWER: answer,
     });
 
@@ -73,18 +79,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Невалідна відповідь від AI' }, { status: 500 });
     }
 
-    // Save answer and feedback
-    const { data: savedAnswer, error: saveError } = await supabase
-      .from('interview_answers')
+    // Save response
+    const { data: savedResponse, error: saveError } = await supabase
+      .from('interview_responses')
       .insert({
-        question_id: questionId,
-        user_id: user.id,
+        session_id: sessionId,
+        question_index: questionIndex,
+        question_text: question.question,
+        question_type: question.type,
         answer_text: answer,
         score: feedback.score,
-        structure_score: feedback.structure_score,
-        relevance_score: feedback.relevance_score,
-        impact_score: feedback.impact_score,
         feedback: {
+          structure_score: feedback.structure_score,
+          relevance_score: feedback.relevance_score,
+          impact_score: feedback.impact_score,
           strengths: feedback.strengths,
           weaknesses: feedback.weaknesses,
           suggestions: feedback.suggestions,
@@ -94,13 +102,13 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (saveError) {
-      console.error('Error saving answer:', saveError);
+      console.error('Error saving response:', saveError);
       return NextResponse.json({ error: 'Не вдалося зберегти відповідь' }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      answer: savedAnswer,
+      response: savedResponse,
       feedback: {
         score: feedback.score,
         structure_score: feedback.structure_score,

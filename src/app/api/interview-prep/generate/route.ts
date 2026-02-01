@@ -11,7 +11,6 @@ export async function POST(request: NextRequest) {
   try {
     const { applicationId } = await request.json();
 
-    // Verify authentication
     const supabase = createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -19,7 +18,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get application data
     const { data: application, error: appError } = await supabase
       .from('applications')
       .select('*, resumes(*)')
@@ -31,17 +29,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Заявку не знайдено' }, { status: 404 });
     }
 
-    // Extract job data
     const jobMetadata = application.job_metadata || {};
     const jobTitle = jobMetadata.role || 'цю позицію';
     const company = jobMetadata.company || 'компанію';
     const jobDescription = application.job_description || '';
 
-    // Get resume
     const resume = application.resumes?.structured || application.tailored_resume || {};
     const resumeSummary = extractResumeSummary(resume);
 
-    // Fill prompt with data
     const prompt = fillPrompt(INTERVIEW_PROMPTS.GENERATE_QUESTIONS, {
       ROLE: jobTitle,
       COMPANY: company,
@@ -49,7 +44,6 @@ export async function POST(request: NextRequest) {
       RESUME_SUMMARY: resumeSummary,
     });
 
-    // Call OpenAI
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -74,28 +68,27 @@ export async function POST(request: NextRequest) {
     const aiResponse = JSON.parse(responseText);
     const questions = aiResponse.questions || [];
 
-    // Save questions to database
-    const questionsToSave = questions.map((q: any, index: number) => ({
-      application_id: applicationId,
-      user_id: user.id,
-      question_number: index + 1,
-      question_type: q.type || 'general',
-      question_text: q.question,
-    }));
-
-    const { data: savedQuestions, error: saveError } = await supabase
-      .from('interview_questions')
-      .insert(questionsToSave)
-      .select();
+    // Create session with questions in JSONB
+    const { data: session, error: saveError } = await supabase
+      .from('interview_sessions')
+      .insert({
+        user_id: user.id,
+        application_id: applicationId,
+        questions: questions,
+        status: 'in_progress',
+      })
+      .select()
+      .single();
 
     if (saveError) {
-      console.error('Error saving questions:', saveError);
-      return NextResponse.json({ error: 'Не вдалося зберегти питання' }, { status: 500 });
+      console.error('Error creating session:', saveError);
+      return NextResponse.json({ error: 'Не вдалося створити сесію' }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      questions: savedQuestions,
+      session_id: session.id,
+      questions: questions,
     });
 
   } catch (error) {
