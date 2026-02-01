@@ -9,115 +9,99 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
+    const { applicationId } = await request.json();
+
+    // Verify authentication
     const supabase = createClient();
-    
-    // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { applicationId } = await request.json();
-
-    if (!applicationId) {
-      return NextResponse.json({ error: 'Application ID required' }, { status: 400 });
-    }
-
-    // Get application details
+    // Get application data
     const { data: application, error: appError } = await supabase
       .from('applications')
-      .select('job_description, tailored_resume, job_metadata')
+      .select('*, resumes(*)')
       .eq('id', applicationId)
       .eq('user_id', user.id)
       .single();
 
     if (appError || !application) {
-      return NextResponse.json({ error: 'Application not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Заявку не знайдено' }, { status: 404 });
     }
 
-    // Extract role and company from job_metadata
-    const role = application.job_metadata?.role || 'the position';
-    const company = application.job_metadata?.company || 'the company';
+    // Extract job data
+    const jobMetadata = application.job_metadata || {};
+    const jobTitle = jobMetadata.role || 'цю позицію';
+    const company = jobMetadata.company || 'компанію';
+    const jobDescription = application.job_description || '';
 
-    // Create compact resume summary to reduce tokens
-    const resumeSummary = extractResumeSummary(application.tailored_resume);
+    // Get resume
+    const resume = application.resumes?.structured || application.tailored_resume || {};
+    const resumeSummary = extractResumeSummary(resume);
 
-    // Fill the prompt template
+    // Fill prompt with data
     const prompt = fillPrompt(INTERVIEW_PROMPTS.GENERATE_QUESTIONS, {
-      ROLE: role,
+      ROLE: jobTitle,
       COMPANY: company,
-      JOB_DESCRIPTION: application.job_description,
+      JOB_DESCRIPTION: jobDescription.substring(0, 2000),
       RESUME_SUMMARY: resumeSummary,
     });
 
-    // Generate questions using AI
+    // Call OpenAI
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are an expert technical recruiter. Always return valid JSON.',
+          content: 'Ти експерт-рекрутер. Завжди повертай валідний JSON.'
         },
         {
           role: 'user',
-          content: prompt,
-        },
+          content: prompt
+        }
       ],
       temperature: 0.7,
-      response_format: { type: 'json_object' },
+      response_format: { type: 'json_object' }
     });
 
     const responseText = completion.choices[0]?.message?.content;
     if (!responseText) {
-      return NextResponse.json({ error: 'Failed to generate questions' }, { status: 500 });
+      return NextResponse.json({ error: 'Не вдалося згенерувати питання' }, { status: 500 });
     }
 
-    // Parse AI response
-    let questions;
-    let parsed;
-    try {
-      parsed = JSON.parse(responseText);
-      questions = Array.isArray(parsed) ? parsed : parsed.questions || [];
-      
-      // Debug log
-      console.log('AI Response:', responseText.substring(0, 200));
-      console.log('Parsed questions count:', questions.length);
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', responseText);
-      return NextResponse.json({ error: 'Invalid AI response format' }, { status: 500 });
-    }
+    const aiResponse = JSON.parse(responseText);
+    const questions = aiResponse.questions || [];
 
-    if (!Array.isArray(questions) || questions.length === 0) {
-      console.error('No questions in response. Parsed:', JSON.stringify(parsed).substring(0, 500));
-      return NextResponse.json({ error: 'No questions generated' }, { status: 500 });
-    }
+    // Save questions to database
+    const questionsToSave = questions.map((q: any, index: number) => ({
+      application_id: applicationId,
+      user_id: user.id,
+      question_number: index + 1,
+      question_type: q.type || 'general',
+      question_text: q.question,
+    }));
 
-    // Create interview session in database
-    const { data: session, error: sessionError } = await supabase
-      .from('interview_sessions')
-      .insert({
-        user_id: user.id,
-        application_id: applicationId,
-        questions: questions,
-        status: 'in_progress',
-      })
-      .select()
-      .single();
+    const { data: savedQuestions, error: saveError } = await supabase
+      .from('interview_questions')
+      .insert(questionsToSave)
+      .select();
 
-    if (sessionError || !session) {
-      console.error('Failed to create session:', sessionError);
-      return NextResponse.json({ error: 'Failed to create interview session' }, { status: 500 });
+    if (saveError) {
+      console.error('Error saving questions:', saveError);
+      return NextResponse.json({ error: 'Не вдалося зберегти питання' }, { status: 500 });
     }
 
     return NextResponse.json({
-      sessionId: session.id,
-      questions: questions,
+      success: true,
+      questions: savedQuestions,
     });
 
   } catch (error) {
     console.error('Generate questions error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Внутрішня помилка сервера' },
       { status: 500 }
     );
   }

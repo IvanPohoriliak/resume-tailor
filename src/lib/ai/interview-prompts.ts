@@ -1,126 +1,125 @@
-// Editable AI Prompts for Interview Prep
-// You can modify these prompts without changing code
+// AI Prompts для Підготовки до Співбесіди (Українська)
 
 export const INTERVIEW_PROMPTS = {
-  // Generate 8 interview questions based on job and resume
-  GENERATE_QUESTIONS: `You are an expert recruiter for a {{ROLE}} position at {{COMPANY}}.
+  // Генерація 8 питань для співбесіди
+  GENERATE_QUESTIONS: `Ти експерт-рекрутер для позиції {{ROLE}} в компанії {{COMPANY}}.
 
-Job Description:
+Опис вакансії:
 {{JOB_DESCRIPTION}}
 
-Candidate's Background:
+Досвід кандидата:
 {{RESUME_SUMMARY}}
 
-Generate exactly 8 realistic interview questions that would be asked for this role.
+Згенеруй рівно 8 реалістичних питань для співбесіди на цю позицію.
 
-Question Distribution:
-- 3 behavioral questions (use STAR method, "Tell me about a time when...")
-- 3 technical/role-specific questions (knowledge, approach, frameworks)
-- 1 situational question ("What would you do if...")
-- 1 culture fit/motivation question
+Розподіл питань:
+- 3 поведінкові питання (використовуй метод STAR, "Розкажіть про ситуацію, коли...")
+- 3 технічні/спеціалізовані питання (знання, підходи, фреймворки)
+- 1 ситуаційне питання ("Що б ви зробили, якби...")
+- 1 питання про мотивацію/культурну відповідність
 
-Make questions:
-- Specific to this exact role and seniority level
-- Relevant to candidate's background
-- Realistic (not generic textbook questions)
+Зроби питання:
+- Специфічними для цієї конкретної ролі та рівня сеньйорності
+- Релевантними до досвіду кандидата
+- Реалістичними (не загальні підручникові питання)
 
-Return as JSON object with this exact format:
+Поверни у форматі JSON:
 {
   "questions": [
     {
       "type": "behavioral",
-      "question": "Tell me about a time when..."
+      "question": "Розкажіть про ситуацію, коли..."
     },
     {
       "type": "technical",
-      "question": "How would you approach..."
+      "question": "Як би ви підійшли до..."
     }
   ]
 }
 
-IMPORTANT: Return ONLY valid JSON, no other text.`,
+ВАЖЛИВО: Поверни ТІЛЬКИ валідний JSON, без іншого тексту.`,
 
-  // Analyze a single answer
-  ANALYZE_ANSWER: `You are a senior interview coach evaluating a candidate's answer.
+  // Аналіз однієї відповіді
+  ANALYZE_ANSWER: `Ти досвідчений коуч по співбесідам, який оцінює відповідь кандидата.
 
-Question Type: {{QUESTION_TYPE}}
-Question: "{{QUESTION}}"
+Тип питання: {{QUESTION_TYPE}}
+Питання: "{{QUESTION}}"
 
-Candidate's Answer:
+Відповідь кандидата:
 {{ANSWER}}
 
-Evaluate the answer on 3 criteria (score each 0-10):
+Оціни відповідь за 3 критеріями (кожен від 0 до 10):
 
-1. STRUCTURE (0-10):
-   - For behavioral: Clear STAR framework (Situation, Task, Action, Result)
-   - For technical: Logical explanation, clear reasoning
-   - For situational: Structured approach, step-by-step thinking
-   - Overall: Clarity and organization
+1. СТРУКТУРА (0-10):
+   - Для поведінкових: Чіткий фреймворк STAR (Ситуація, Завдання, Дія, Результат)
+   - Для технічних: Логічне пояснення, чітка аргументація
+   - Для ситуаційних: Структурований підхід, покрокове мислення
+   - Загалом: Ясність та організованість
 
-2. RELEVANCE (0-10):
-   - Directly answers the question
-   - Appropriate depth for role/seniority
-   - Shows understanding of what interviewer wants
+2. РЕЛЕВАНТНІСТЬ (0-10):
+   - Безпосередньо відповідає на питання
+   - Відповідна глибина для ролі/сеньйорності
+   - Демонструє розуміння того, що хоче почути інтерв'юер
 
-3. IMPACT (0-10):
-   - Demonstrates tangible results
-   - Uses specific examples (not vague)
-   - Shows business/technical outcomes
-   - Quantifiable when possible
+3. ВПЛИВ (0-10):
+   - Демонструє конкретні результати
+   - Використовує специфічні приклади (не розпливчасті)
+   - Показує бізнес/технічні результати
+   - Кількісні показники, коли можливо
 
-Then provide:
-- 2-3 specific STRENGTHS (what was done well)
-- 2-3 specific WEAKNESSES (what's missing or could be better)
-- 2-3 actionable SUGGESTIONS (concrete ways to improve this answer)
+Потім надай:
+- 2-3 конкретні СИЛЬНІ СТОРОНИ (що було зроблено добре)
+- 2-3 конкретні СЛАБКІ СТОРОНИ (що відсутнє або можна покращити)
+- 2-3 практичні РЕКОМЕНДАЦІЇ (конкретні способи покращити цю відповідь)
 
-Overall Score = average of 3 criteria, converted to 0-100 scale
+Загальний Бал = середнє з 3 критеріїв, конвертоване в шкалу 0-100
 
-Return as JSON:
+Поверни у форматі JSON:
 {
   "score": 75,
   "structure_score": 8,
   "relevance_score": 7,
   "impact_score": 8,
-  "strengths": ["specific strength 1", "strength 2"],
-  "weaknesses": ["specific gap 1", "gap 2"],
-  "suggestions": ["actionable tip 1", "tip 2"]
+  "strengths": ["конкретна сильна сторона 1", "сильна сторона 2"],
+  "weaknesses": ["конкретний пробіл 1", "пробіл 2"],
+  "suggestions": ["практична порада 1", "порада 2"]
 }`,
 
-  // Generate final summary after all 8 questions
-  FINAL_SUMMARY: `You are a career coach reviewing a complete mock interview performance.
+  // Фінальне резюме після всіх 8 питань
+  FINAL_SUMMARY: `Ти кар'єрний коуч, який аналізує повну імітацію співбесіди.
 
-The candidate answered 8 questions with the following results:
+Кандидат відповів на 8 питань з такими результатами:
 
 {{ALL_RESPONSES}}
 
-Average Score: {{AVERAGE_SCORE}}/100
+Середній Бал: {{AVERAGE_SCORE}}/100
 
-Provide an overall assessment:
+Надай загальну оцінку:
 
-1. OVERALL ASSESSMENT (2-3 sentences):
-   - General performance level
-   - Interview readiness
-   - One key observation
+1. ЗАГАЛЬНА ОЦІНКА (2-3 речення):
+   - Загальний рівень виступу
+   - Готовність до співбесіди
+   - Одне ключове спостереження
 
-2. TOP 3 STRENGTHS (patterns across all answers):
-   - What the candidate consistently does well
-   - Specific skills demonstrated
+2. ТОП-3 СИЛЬНІ СТОРОНИ (патерни у всіх відповідях):
+   - Що кандидат послідовно робить добре
+   - Конкретні продемонстровані навички
 
-3. TOP 3 AREAS TO IMPROVE (patterns of weakness):
-   - What needs work across multiple answers
-   - Common gaps or missing elements
+3. ТОП-3 ОБЛАСТІ ДЛЯ ПОКРАЩЕННЯ (патерни слабкостей):
+   - Що потребує роботи у кількох відповідях
+   - Загальні пробіли або відсутні елементи
 
-4. ACTION PLAN (3 concrete next steps):
-   - Specific things to practice before real interview
-   - How to address the weaknesses
-   - Resources or exercises to try
+4. ПЛАН ДІЙ (3 конкретні наступні кроки):
+   - Конкретні речі для практики перед реальною співбесідою
+   - Як усунути слабкості
+   - Ресурси або вправи для спроби
 
-Return as JSON:
+Поверни у форматі JSON:
 {
   "assessment": "...",
-  "strengths": ["strength 1", "strength 2", "strength 3"],
-  "weaknesses": ["area 1", "area 2", "area 3"],
-  "actions": ["step 1", "step 2", "step 3"]
+  "strengths": ["сильна сторона 1", "сильна сторона 2", "сильна сторона 3"],
+  "weaknesses": ["область 1", "область 2", "область 3"],
+  "actions": ["крок 1", "крок 2", "крок 3"]
 }`,
 };
 

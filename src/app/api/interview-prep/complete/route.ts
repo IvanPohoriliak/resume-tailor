@@ -9,115 +9,141 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
+    const { applicationId } = await request.json();
+
+    // Verify authentication
     const supabase = createClient();
-    
-    // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { sessionId } = await request.json();
-
-    if (!sessionId) {
-      return NextResponse.json({ error: 'Session ID required' }, { status: 400 });
-    }
-
-    // Get session
-    const { data: session, error: sessionError } = await supabase
-      .from('interview_sessions')
-      .select('*')
-      .eq('id', sessionId)
+    // Get all questions for this application
+    const { data: questions, error: questionsError } = await supabase
+      .from('interview_questions')
+      .select('id, question_text, question_type')
+      .eq('application_id', applicationId)
       .eq('user_id', user.id)
-      .single();
+      .order('question_number');
 
-    if (sessionError || !session) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    if (questionsError || !questions || questions.length === 0) {
+      return NextResponse.json({ error: 'Питання не знайдено' }, { status: 404 });
     }
 
-    // Get all responses for this session
-    const { data: responses, error: responsesError } = await supabase
-      .from('interview_responses')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('question_index');
+    // Get all answers with feedback
+    const { data: answers, error: answersError } = await supabase
+      .from('interview_answers')
+      .select('question_id, answer_text, score, feedback')
+      .in('question_id', questions.map(q => q.id))
+      .eq('user_id', user.id);
 
-    if (responsesError || !responses || responses.length === 0) {
-      return NextResponse.json({ error: 'No responses found' }, { status: 404 });
+    if (answersError || !answers || answers.length === 0) {
+      return NextResponse.json({ 
+        error: 'Немає відповідей для аналізу. Спочатку дайте відповіді на питання.'
+      }, { status: 404 });
+    }
+
+    // Check if all questions are answered
+    if (answers.length < questions.length) {
+      return NextResponse.json({ 
+        error: `Відповіли тільки на ${answers.length} з ${questions.length} питань. Завершіть всі питання для отримання підсумку.`
+      }, { status: 400 });
     }
 
     // Calculate average score
-    const totalScore = responses.reduce((sum, r) => sum + r.score, 0);
-    const averageScore = Math.round(totalScore / responses.length);
+    const totalScore = answers.reduce((sum, a) => sum + (a.score || 0), 0);
+    const avgScore = Math.round(totalScore / answers.length);
 
-    // Format responses for AI prompt
-    const responseSummary = responses.map((r, idx) => 
-      `Q${idx + 1} (${r.question_type}): Score ${r.score}/100
-Strengths: ${r.feedback.strengths?.join(', ') || 'N/A'}
-Weaknesses: ${r.feedback.weaknesses?.join(', ') || 'N/A'}`
-    ).join('\n\n');
+    // Format all responses for AI
+    const formattedResponses = questions.map((q, index) => {
+      const answer = answers.find(a => a.question_id === q.id);
+      return `
+Питання ${index + 1} (${q.question_type}):
+${q.question_text}
 
-    // Fill the prompt template
+Відповідь:
+${answer?.answer_text || 'N/A'}
+
+Оцінка: ${answer?.score || 0}/100
+
+Сильні сторони: ${answer?.feedback?.strengths?.join('; ') || 'N/A'}
+Слабкі сторони: ${answer?.feedback?.weaknesses?.join('; ') || 'N/A'}
+`;
+    }).join('\n---\n');
+
+    // Fill prompt with data
     const prompt = fillPrompt(INTERVIEW_PROMPTS.FINAL_SUMMARY, {
-      ALL_RESPONSES: responseSummary,
-      AVERAGE_SCORE: averageScore.toString(),
+      ALL_RESPONSES: formattedResponses,
+      AVERAGE_SCORE: avgScore.toString(),
     });
 
-    // Generate final summary using AI
+    // Call OpenAI
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are a career coach providing constructive interview feedback. Always return valid JSON.',
+          content: 'Ти кар\'єрний коуч, який аналізує співбесіди. Завжди повертай валідний JSON.'
         },
         {
           role: 'user',
-          content: prompt,
-        },
+          content: prompt
+        }
       ],
       temperature: 0.5,
-      response_format: { type: 'json_object' },
+      response_format: { type: 'json_object' }
     });
 
     const responseText = completion.choices[0]?.message?.content;
     if (!responseText) {
-      return NextResponse.json({ error: 'Failed to generate summary' }, { status: 500 });
+      return NextResponse.json({ error: 'Не вдалося згенерувати підсумок' }, { status: 500 });
     }
 
-    // Parse AI response
-    let finalFeedback;
-    try {
-      finalFeedback = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', responseText);
-      return NextResponse.json({ error: 'Invalid AI response format' }, { status: 500 });
+    const summary = JSON.parse(responseText);
+
+    // Validate summary structure
+    if (!summary.assessment || !summary.strengths || !summary.weaknesses || !summary.actions) {
+      return NextResponse.json({ error: 'Невалідна відповідь від AI' }, { status: 500 });
     }
 
-    // Update session with final results
-    const { error: updateError } = await supabase
-      .from('interview_sessions')
-      .update({
-        status: 'completed',
-        overall_score: averageScore,
-        feedback: finalFeedback,
+    // Save summary
+    const { data: savedSummary, error: saveError } = await supabase
+      .from('interview_summaries')
+      .insert({
+        application_id: applicationId,
+        user_id: user.id,
+        average_score: avgScore,
+        total_questions: questions.length,
+        assessment: summary.assessment,
+        strengths: summary.strengths,
+        weaknesses: summary.weaknesses,
+        action_plan: summary.actions,
       })
-      .eq('id', sessionId);
+      .select()
+      .single();
 
-    if (updateError) {
-      console.error('Failed to update session:', updateError);
-      return NextResponse.json({ error: 'Failed to save results' }, { status: 500 });
+    if (saveError) {
+      console.error('Error saving summary:', saveError);
+      return NextResponse.json({ error: 'Не вдалося зберегти підсумок' }, { status: 500 });
     }
 
     return NextResponse.json({
-      overallScore: averageScore,
-      feedback: finalFeedback,
+      success: true,
+      summary: {
+        average_score: avgScore,
+        total_questions: questions.length,
+        assessment: summary.assessment,
+        strengths: summary.strengths,
+        weaknesses: summary.weaknesses,
+        actions: summary.actions,
+      },
     });
 
   } catch (error) {
-    console.error('Complete session error:', error);
+    console.error('Generate summary error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Внутрішня помилка сервера' },
       { status: 500 }
     );
   }
