@@ -95,28 +95,80 @@ Title: ${jobData.title}
 Company: ${jobData.company}
 Description: ${jobData.description.substring(0, 2000)}
 
-Instructions:
-1. Modify the professional summary to match the job requirements
-2. Adjust experience bullets to highlight relevant skills
-3. Prioritize keywords from the job description
-4. Keep the same structure and format
-5. Return the tailored resume in the same JSON structure
+CRITICAL RULES:
+1. NEVER fabricate experience, skills, or achievements that don't exist in the original resume
+2. ONLY reframe and highlight existing experience to match job requirements
+3. Use transferable skills (e.g., manufacturing → FMCG, electronics → technology)
+4. Add keywords naturally into existing content, don't create fake bullets
 
-Return JSON with: { tailored_resume: {...}, matched_keywords: [], missing_keywords: [] }`;
+TAILORING STRATEGY:
+
+Step 1 - Extract Keywords:
+- Identify TOP 15 keywords/phrases from job description (tools, skills, methodologies, certifications)
+- Categorize as: Technical Skills, Soft Skills, Tools/Systems, Methodologies, Industry Terms
+
+Step 2 - Match Existing Experience:
+- Find which resume bullets/skills relate to job requirements
+- Identify transferable experience (e.g., "led 20 team members" → "managed cross-functional teams")
+- Map similar domains (automotive/electronics → FMCG if job is FMCG)
+
+Step 3 - Reframe Professional Summary:
+- Incorporate TOP 5 keywords from job posting
+- Emphasize relevant experience years and domains
+- Highlight transferable achievements that match job goals
+- Keep tone professional and results-oriented
+
+Step 4 - Enhance Experience Bullets:
+- Rewrite bullets to emphasize skills mentioned in job description
+- Add relevant keywords where they fit naturally
+- Quantify achievements when possible
+- Keep all facts accurate - only change phrasing, not substance
+- If job mentions "portfolio management" and resume has "managed 20+ projects", reframe as "managed portfolio of 20+ concurrent projects"
+
+Step 5 - Skills Section:
+- Prioritize skills that match job requirements
+- Add tools/methodologies from job description ONLY if resume shows evidence of using them
+- Group related skills together (e.g., "Agile methodologies including Scrum")
+
+Step 6 - Identify Gaps:
+- List keywords from job description NOT found in resume
+- These become "missing_keywords" - suggest top 3-5 most important
+
+RESPONSE FORMAT:
+{
+  "tailored_resume": {
+    "contact": { ... }, // unchanged
+    "summary": "Rewritten to emphasize job-relevant experience with keywords",
+    "experience": [ // reframed bullets, same jobs/dates/companies
+      {
+        "company": "...",
+        "title": "...",
+        "dates": "...",
+        "bullets": ["Reframed bullet with keywords", "..."]
+      }
+    ],
+    "education": [ ... ], // unchanged
+    "skills": "Reordered and grouped to prioritize job-relevant skills"
+  },
+  "matched_keywords": ["keyword1", "keyword2", ...], // 10-15 keywords found in both job and resume
+  "missing_keywords": ["critical_keyword1", "critical_keyword2", ...] // 3-5 important keywords NOT in resume
+}
+
+Return ONLY valid JSON, no explanations.`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are an expert resume writer. Always return valid JSON.'
+          content: 'You are an expert ATS resume optimizer and career coach. Your role is to reframe existing experience to match job requirements while maintaining 100% factual accuracy. NEVER fabricate experience. Focus on highlighting transferable skills and using relevant keywords naturally. Always return valid JSON.'
         },
         {
           role: 'user',
           content: prompt
         }
       ],
-      temperature: 0.7,
+      temperature: 0.3,
       response_format: { type: 'json_object' }
     });
 
