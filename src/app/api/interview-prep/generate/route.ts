@@ -85,9 +85,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Не вдалося створити сесію' }, { status: 500 });
     }
 
+    // Return camelCase for frontend
     return NextResponse.json({
       success: true,
-      session_id: session.id,
+      sessionId: session.id,  // camelCase ✅
       questions: questions,
     });
 

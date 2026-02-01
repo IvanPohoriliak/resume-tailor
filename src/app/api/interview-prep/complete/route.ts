@@ -108,7 +108,7 @@ ${r.answer_text}
     }
 
     // Update session with overall score and feedback
-    const { data: updatedSession, error: updateError } = await supabase
+    const { error: updateError } = await supabase
       .from('interview_sessions')
       .update({
         overall_score: avgScore,
@@ -120,20 +120,18 @@ ${r.answer_text}
         },
         status: 'completed',
       })
-      .eq('id', sessionId)
-      .select()
-      .single();
+      .eq('id', sessionId);
 
     if (updateError) {
       console.error('Error updating session:', updateError);
       return NextResponse.json({ error: 'Не вдалося оновити сесію' }, { status: 500 });
     }
 
+    // Return camelCase for frontend
     return NextResponse.json({
       success: true,
-      summary: {
-        overall_score: avgScore,
-        total_questions: questions.length,
+      overallScore: avgScore,  // camelCase ✅
+      feedback: {
         assessment: summary.assessment,
         strengths: summary.strengths,
         weaknesses: summary.weaknesses,
