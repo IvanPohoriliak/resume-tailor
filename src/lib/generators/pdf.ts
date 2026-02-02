@@ -1,6 +1,14 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { StructuredResume } from '@/types';
 
+// Helper to safely format skills
+const formatSkills = (skills: any): string => {
+  if (!skills) return '';
+  if (Array.isArray(skills)) return skills.join(' • ');
+  if (typeof skills === 'object') return Object.values(skills).flat().filter(Boolean).join(' • ');
+  return String(skills);
+};
+
 export async function generatePdf(resume: StructuredResume): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([612, 792]); // Letter size
@@ -108,7 +116,7 @@ export async function generatePdf(resume: StructuredResume): Promise<Buffer> {
   if (resume.skills && resume.skills.length > 0) {
     drawText('SKILLS', 14, true);
     yPosition -= 5;
-    const skillsText = resume.skills.join(' • ');
+    const skillsText = formatSkills(resume.skills);
     const skillsLines = wrapText(skillsText, width - 2 * margin);
     skillsLines.forEach(line => drawText(line, 10));
   }

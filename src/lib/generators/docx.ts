@@ -1,6 +1,14 @@
 import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, Packer } from 'docx';
 import { StructuredResume } from '@/types';
 
+// Helper to safely format skills
+const formatSkills = (skills: any): string => {
+  if (!skills) return '';
+  if (Array.isArray(skills)) return skills.join(' • ');
+  if (typeof skills === 'object') return Object.values(skills).flat().filter(Boolean).join(' • ');
+  return String(skills);
+};
+
 export async function generateDocx(resume: StructuredResume): Promise<Buffer> {
   const doc = new Document({
     sections: [
@@ -136,7 +144,7 @@ export async function generateDocx(resume: StructuredResume): Promise<Buffer> {
               spacing: { before: 200, after: 200 },
             }),
             new Paragraph({
-              text: resume.skills.join(' • '),
+              text: formatSkills(resume.skills),
               spacing: { after: 200 },
             }),
           ] : []),

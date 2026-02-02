@@ -34,6 +34,14 @@ interface Resume {
   structured: StructuredResume;
 }
 
+// Helper to safely format skills
+const formatSkills = (skills: any): string => {
+  if (!skills) return '';
+  if (Array.isArray(skills)) return skills.join(' • ');
+  if (typeof skills === 'object') return Object.values(skills).flat().filter(Boolean).join(' • ');
+  return String(skills);
+};
+
 function RefinePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -586,7 +594,7 @@ function RefinePageContent() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleEdit('skills', tailoredResume.skills.join(' • '))}
+                              onClick={() => handleEdit('skills', formatSkills(tailoredResume.skills))}
                             >
                               Edit
                             </Button>
@@ -614,7 +622,7 @@ function RefinePageContent() {
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm">{tailoredResume.skills.join(' • ')}</p>
+                          <p className="text-sm">{formatSkills(tailoredResume.skills)}</p>
                         )}
                       </div>
                     )}
