@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import OpenAI from 'openai';
 import { INTERVIEW_PROMPTS, fillPrompt, extractResumeSummary } from '@/lib/ai/interview-prompts';
+import { calculateATSScore, generateATSRecommendations } from '@/lib/utils/ats';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -193,15 +194,12 @@ Return ONLY valid JSON, no explanations.`;
         ...aiResponse.tailored_resume
       };
     }
-    
-    const matchedKeywords = aiResponse.matched_keywords || [];
-    const missingKeywords = aiResponse.missing_keywords || [];
 
-    // Calculate ATS score (simple formula based on keyword matching)
-    const totalKeywords = matchedKeywords.length + missingKeywords.length;
-    const atsScore = totalKeywords > 0 
-      ? Math.round((matchedKeywords.length / totalKeywords) * 100)
-      : 75; // Default score
+    // Calculate ATS score using improved algorithm (not simple keyword ratio)
+    const { score: atsScore, keywords } = calculateATSScore(tailoredResume, jobData.description);
+    
+    // Generate detailed recommendations with score breakdowns
+    const recommendations = generateATSRecommendations(tailoredResume, jobData.description, atsScore);
 
     // Save application to database
     const { data: application, error: appError } = await supabase
@@ -219,10 +217,8 @@ Return ONLY valid JSON, no explanations.`;
         },
         tailored_resume: tailoredResume,
         ats_score: atsScore,
-        keywords: {
-          matched: matchedKeywords,
-          missing: missingKeywords
-        },
+        keywords: keywords,
+        recommendations: recommendations, // NEW: Save detailed recommendations
         status: 'applied'
       })
       .select()
@@ -241,7 +237,8 @@ Return ONLY valid JSON, no explanations.`;
       applicationId: application.id,
       atsScore: atsScore,
       downloadUrl: downloadUrl,
-      missingKeywords: missingKeywords.slice(0, 5) // Top 5 missing keywords
+      recommendations: recommendations, // NEW: Return to extension popup
+      missingKeywords: keywords.missing.slice(0, 5) // Top 5 missing keywords
     });
 
   } catch (error) {

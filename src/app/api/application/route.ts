@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { tailorResume, extractJobMetadata } from '@/lib/ai/tailoring';
-import { calculateATSScore } from '@/lib/utils/ats';
+import { calculateATSScore, generateATSRecommendations } from '@/lib/utils/ats';
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,8 +66,11 @@ export async function POST(request: NextRequest) {
     // Tailor resume
     const tailoredResume = await tailorResume(resume.structured, jobDescription);
 
-    // Calculate ATS score
+    // Calculate ATS score with improved algorithm
     const { score, keywords } = calculateATSScore(tailoredResume, jobDescription);
+    
+    // Generate detailed recommendations
+    const recommendations = generateATSRecommendations(tailoredResume, jobDescription, score);
 
     // Save application
     const { data: application, error: appError } = await supabase
@@ -80,6 +83,7 @@ export async function POST(request: NextRequest) {
         tailored_resume: tailoredResume,
         ats_score: score,
         keywords: keywords,
+        recommendations: recommendations, // NEW: Save recommendations
         status: 'applied',
       })
       .select()
