@@ -134,13 +134,36 @@ export function fillPrompt(
   });
 }
 
-// Helper to extract resume summary (to reduce tokens)
+// Helper to extract resume summary (to reduce tokens) - SAFE VERSION
 export function extractResumeSummary(resume: any): string {
   const summary = resume.summary || '';
-  const topExperiences = (resume.experience || []).slice(0, 3).map((exp: any) => 
-    `- ${exp.role} at ${exp.company}: ${exp.bullets.slice(0, 2).join('; ')}`
-  ).join('\n');
-  const skills = (resume.skills || []).slice(0, 10).join(', ');
+  
+  // Safe experience extraction
+  const topExperiences = (resume.experience || []).slice(0, 3).map((exp: any) => {
+    const role = exp.role || 'Position';
+    const company = exp.company || 'Company';
+    const bullets = Array.isArray(exp.bullets) ? exp.bullets.slice(0, 2).join('; ') : '';
+    return `- ${role} at ${company}: ${bullets}`;
+  }).join('\n');
+  
+  // Safe skills extraction - handle array, object, or string
+  let skillsText = '';
+  if (resume.skills) {
+    if (Array.isArray(resume.skills)) {
+      // Array: ['JavaScript', 'Python']
+      skillsText = resume.skills.slice(0, 10).join(', ');
+    } else if (typeof resume.skills === 'object') {
+      // Object: {technical: [], soft: []}
+      const allSkills = Object.values(resume.skills)
+        .flat()
+        .filter(Boolean)
+        .slice(0, 10);
+      skillsText = allSkills.join(', ');
+    } else if (typeof resume.skills === 'string') {
+      // String: "JavaScript, Python"
+      skillsText = resume.skills;
+    }
+  }
   
   return `
 Summary: ${summary}
@@ -148,6 +171,6 @@ Summary: ${summary}
 Key Experience:
 ${topExperiences}
 
-Skills: ${skills}
+Skills: ${skillsText}
 `.trim();
 }
