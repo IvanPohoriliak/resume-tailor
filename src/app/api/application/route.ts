@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
     const jobMetadata = await extractJobMetadata(jobDescription);
 
     // Calculate ATS score with detailed recommendations
-    const { score, keywords, recommendations } = calculateATSScore(
-      tailoredResume || resume.structured, 
+    const { score, keywords, recommendations, breakdown, missingKeywords } = calculateATSScore(
+      tailoredResume || resume.structured,
       jobDescription
     );
 
@@ -82,7 +82,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create application' }, { status: 500 });
     }
 
-    return NextResponse.json({ application });
+    // Return application with breakdown (breakdown is computed, not stored)
+    return NextResponse.json({
+      application,
+      breakdown,
+      missingKeywords
+    });
   } catch (error) {
     console.error('Application creation error:', error);
     return NextResponse.json(

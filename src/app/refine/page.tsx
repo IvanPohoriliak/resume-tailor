@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/client';
 import { StructuredResume } from '@/types';
+import { ATSBreakdown } from '@/lib/utils/ats';
 
 interface ApplicationFromDB {
   id: string;
@@ -45,6 +46,8 @@ function RefinePageContent() {
   const [tailoredResume, setTailoredResume] = useState<StructuredResume | null>(null);
   const [atsScore, setAtsScore] = useState<number>(0);
   const [keywords, setKeywords] = useState<{ matched: string[]; missing: string[] }>({ matched: [], missing: [] });
+  const [breakdown, setBreakdown] = useState<ATSBreakdown | null>(null);
+  const [missingKeywords, setMissingKeywords] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingSection, setEditingSection] = useState<string | null>(null);
@@ -151,7 +154,7 @@ function RefinePageContent() {
       if (data.application) {
         setTailoredResume(data.application.tailored_resume);
         setAtsScore(data.application.ats_score);
-        
+
         // Handle both formats
         const missingData = data.application.keywords?.missing || [];
         setKeywords({
@@ -159,6 +162,14 @@ function RefinePageContent() {
           missing: Array.isArray(missingData) ? missingData : [missingData]
         });
         setCurrentApplicationId(data.application.id);
+
+        // Set breakdown and missing keywords if available
+        if (data.breakdown) {
+          setBreakdown(data.breakdown);
+        }
+        if (data.missingKeywords) {
+          setMissingKeywords(data.missingKeywords);
+        }
       }
     } catch (error) {
       console.error('Error tailoring resume:', error);
@@ -361,28 +372,64 @@ function RefinePageContent() {
                     </span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                  {/* Score Breakdown */}
+                  {breakdown && (
+                    <div className="space-y-2">
+                      <p className="font-medium text-sm mb-2">Score Breakdown:</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Keywords</span>
+                          <span className="font-medium">{breakdown.keywords.score}/{breakdown.keywords.max}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Experience</span>
+                          <span className="font-medium">{breakdown.experience.score}/{breakdown.experience.max}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Skills</span>
+                          <span className="font-medium">{breakdown.skills.score}/{breakdown.skills.max}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Education</span>
+                          <span className="font-medium">{breakdown.education.score}/{breakdown.education.max}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Format</span>
+                          <span className="font-medium">{breakdown.format.score}/{breakdown.format.max}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
                   {keywords.missing.length > 0 && (
-                    <div className="text-sm space-y-2">
+                    <div className="text-sm space-y-2 border-t pt-3">
                       {isRecommendationsFormat(keywords.missing) ? (
-                        // New format: Detailed categorized recommendations
                         <>
-                          <p className="font-medium mb-2">Recommendations:</p>
+                          <p className="font-medium">💡 Recommendations:</p>
                           <div className="space-y-1">
                             {keywords.missing.map((recommendation, idx) => (
                               <p key={idx} className="text-gray-700 leading-relaxed">
-                                {recommendation}
+                                • {recommendation}
                               </p>
                             ))}
                           </div>
                         </>
                       ) : (
-                        // Old format: Simple missing keywords
                         <>
                           <p className="font-medium mb-1">Missing keywords:</p>
                           <p className="text-gray-600">{keywords.missing.slice(0, 10).join(', ')}</p>
                         </>
                       )}
+                    </div>
+                  )}
+
+                  {/* Missing Keywords */}
+                  {missingKeywords.length > 0 && (
+                    <div className="text-sm border-t pt-3">
+                      <p className="font-medium mb-1">Missing Keywords:</p>
+                      <p className="text-gray-600">{missingKeywords.slice(0, 10).join(', ')}{missingKeywords.length > 10 ? '...' : ''}</p>
                     </div>
                   )}
                 </CardContent>

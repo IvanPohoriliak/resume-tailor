@@ -1,5 +1,14 @@
 import { StructuredResume, Keywords } from '@/types';
 
+// Score breakdown type
+export interface ATSBreakdown {
+  keywords: { score: number; max: number };
+  experience: { score: number; max: number };
+  skills: { score: number; max: number };
+  education: { score: number; max: number };
+  format: { score: number; max: number };
+}
+
 // Keyword categories with weights
 const KEYWORD_WEIGHTS = {
   technical: 3,    // Python, AWS, Docker
@@ -257,37 +266,117 @@ export function generateDetailedRecommendations(
   return recommendations;
 }
 
+// Score skills separately (0-15 points)
+function scoreSkills(resume: StructuredResume, jobDescription: string): number {
+  const jobLower = jobDescription.toLowerCase();
+  const skills = Array.isArray(resume.skills) ? resume.skills : [];
+
+  if (skills.length === 0) return 0;
+
+  let matchedSkills = 0;
+  skills.forEach(skill => {
+    if (jobLower.includes(skill.toLowerCase())) {
+      matchedSkills++;
+    }
+  });
+
+  const matchRatio = skills.length > 0 ? matchedSkills / Math.min(skills.length, 10) : 0;
+  return Math.round(matchRatio * 15);
+}
+
+// Score education separately (0-15 points)
+function scoreEducation(resume: StructuredResume, jobDescription: string): number {
+  const hasDegreeReq = /bachelor|master|mba|phd|degree/i.test(jobDescription);
+
+  if (!hasDegreeReq) return 15;
+
+  if (resume.education.length > 0) {
+    const degrees = resume.education.map(e => e.degree.toLowerCase()).join(' ');
+    const jobLower = jobDescription.toLowerCase();
+
+    if (
+      (jobLower.includes('master') && degrees.includes('master')) ||
+      (jobLower.includes('phd') && degrees.includes('phd')) ||
+      (jobLower.includes('mba') && degrees.includes('mba'))
+    ) {
+      return 15;
+    } else if (
+      (jobLower.includes('bachelor') && degrees.includes('bachelor')) ||
+      degrees.includes('master') || degrees.includes('phd')
+    ) {
+      return 12;
+    }
+    return 8;
+  }
+  return 3;
+}
+
+// Score format/structure (0-5 points)
+function scoreFormat(resume: StructuredResume): number {
+  let score = 0;
+
+  if (resume.summary && resume.summary.length > 50) score += 1;
+  if (resume.experience.length >= 2) score += 1;
+  if (resume.experience.every(e => e.bullets.length >= 2)) score += 1;
+  if (Array.isArray(resume.skills) && resume.skills.length >= 5) score += 1;
+  if (resume.education.length >= 1) score += 1;
+
+  return score;
+}
+
 // Main improved calculation with detailed recommendations
 export function calculateATSScore(
   resume: StructuredResume,
   jobDescription: string
-): { score: number; keywords: Keywords; recommendations: string[] } {
-  
+): { score: number; keywords: Keywords; recommendations: string[]; breakdown: ATSBreakdown; missingKeywords: string[] } {
+
   const jobKeywords = extractKeywords(jobDescription);
-  
+
   // Calculate weighted scores for each component
   const keywordAnalysis = calculateWeightedKeywordScore(resume, jobKeywords);
-  const experienceScore = scoreExperience(resume, jobDescription);
-  const otherScore = scoreOtherFactors(resume, jobDescription);
-  
-  // Total: 50 (keywords) + 25 (experience) + 25 (other) = 100
-  const totalScore = keywordAnalysis.score + experienceScore + otherScore;
-  
+
+  // Experience: quantified achievements (0-25 points)
+  const allBullets = resume.experience.flatMap(e => e.bullets);
+  const quantifiedCount = allBullets.filter(b => /\d+%|\$\d+|\d+\+|\d+/.test(b)).length;
+  const quantificationRatio = allBullets.length > 0 ? quantifiedCount / allBullets.length : 0;
+  const experienceScore = Math.round(quantificationRatio * 20) + (resume.experience.length >= 2 ? 5 : 0);
+
+  const skillsScore = scoreSkills(resume, jobDescription);
+  const educationScore = scoreEducation(resume, jobDescription);
+  const formatScore = scoreFormat(resume);
+
+  // Adjust keyword score to 40 max (instead of 50) to fit new breakdown
+  const keywordsScoreAdjusted = Math.round(keywordAnalysis.score * 0.8);
+
+  // Total: 40 (keywords) + 25 (experience) + 15 (skills) + 15 (education) + 5 (format) = 100
+  const totalScore = keywordsScoreAdjusted + Math.min(experienceScore, 25) + skillsScore + educationScore + formatScore;
+
+  // Build breakdown
+  const breakdown: ATSBreakdown = {
+    keywords: { score: keywordsScoreAdjusted, max: 40 },
+    experience: { score: Math.min(experienceScore, 25), max: 25 },
+    skills: { score: skillsScore, max: 15 },
+    education: { score: educationScore, max: 15 },
+    format: { score: formatScore, max: 5 }
+  };
+
   // Generate detailed recommendations
   const recommendations = generateDetailedRecommendations(
     resume,
     jobDescription,
     keywordAnalysis
   );
-  
-  // Return with recommendations replacing simple missing list
+
+  // Return with recommendations and breakdown
   return {
     score: Math.min(Math.round(totalScore), 100),
     keywords: {
       matched: keywordAnalysis.matched,
-      missing: recommendations // Detailed categorized recommendations instead of simple list
+      missing: recommendations
     },
-    recommendations
+    recommendations,
+    breakdown,
+    missingKeywords: keywordAnalysis.missing
   };
 }
 
