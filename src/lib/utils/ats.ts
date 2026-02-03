@@ -25,10 +25,32 @@ const INDUSTRY_PATTERNS = /\b(saas|paas|fintech|ecommerce|e-commerce|b2b|b2c|mar
 const CERT_PATTERNS = /\b(pmp|prince2|aws certified|azure certified|google cloud|scrum master|csm|psm|six sigma|lean|cpa|cfa|mba|phd|cissp|cism|comptia|itil)\b/gi;
 
 export function extractKeywords(text: string): string[] {
+  // Extended stop words including common job posting terms
   const stopWords = new Set([
     'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
     'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
-    'to', 'was', 'will', 'with', 'we', 'you', 'your', 'our', 'their'
+    'to', 'was', 'will', 'with', 'we', 'you', 'your', 'our', 'their',
+    // Common job posting words to ignore
+    'job', 'role', 'position', 'company', 'team', 'work', 'working',
+    'experience', 'years', 'year', 'looking', 'seeking', 'hiring',
+    'join', 'about', 'this', 'what', 'who', 'how', 'why', 'when',
+    'where', 'which', 'would', 'could', 'should', 'have', 'has',
+    'been', 'being', 'were', 'they', 'them', 'these', 'those',
+    'can', 'may', 'must', 'shall', 'might', 'need', 'want',
+    'also', 'well', 'just', 'only', 'even', 'more', 'most', 'some',
+    'any', 'all', 'each', 'every', 'both', 'few', 'other', 'such',
+    'into', 'over', 'after', 'before', 'between', 'under', 'again',
+    'further', 'then', 'once', 'here', 'there', 'very', 'own',
+    'same', 'than', 'too', 'now', 'during', 'through', 'across',
+    'ability', 'able', 'knowledge', 'skills', 'strong', 'excellent',
+    'good', 'great', 'best', 'better', 'high', 'new', 'first',
+    'within', 'including', 'include', 'includes', 'required', 'requirements',
+    'preferred', 'plus', 'bonus', 'ideal', 'candidate', 'candidates',
+    'opportunity', 'opportunities', 'responsibilities', 'responsible',
+    'ensure', 'provide', 'support', 'develop', 'create', 'build',
+    'manage', 'lead', 'help', 'make', 'take', 'use', 'using',
+    'based', 'like', 'understand', 'understanding', 'culture', 'aligned',
+    'performance', 'success', 'successful', 'key', 'part', 'full'
   ]);
 
   const words = text
@@ -42,8 +64,18 @@ export function extractKeywords(text: string): string[] {
     wordCount.set(word, (wordCount.get(word) || 0) + 1);
   });
 
+  // Also extract specific technical terms that might appear only once
+  const technicalTerms = text.match(/\b(python|javascript|typescript|java|c\+\+|react|node|angular|vue|aws|azure|gcp|docker|kubernetes|sql|postgresql|mongodb|redis|api|rest|graphql|ci\/cd|git|github|gitlab|jenkins|terraform|ansible|linux|agile|scrum|jira|confluence|figma|tableau|power\s*bi|salesforce|sap)\b/gi) || [];
+
+  technicalTerms.forEach(term => {
+    const normalized = term.toLowerCase().replace(/\s+/g, ' ');
+    if (!wordCount.has(normalized)) {
+      wordCount.set(normalized, 1);
+    }
+  });
+
   return Array.from(wordCount.entries())
-    .filter(([_, count]) => count >= 2)
+    .filter(([word, count]) => count >= 1 && !stopWords.has(word))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 50)
     .map(([word]) => word);
@@ -191,6 +223,23 @@ function scoreOtherFactors(resume: StructuredResume, jobDescription: string): nu
   return Math.min(score, 25); // Max 25 points for other factors
 }
 
+// Helper to test keyword category without global regex issues
+function isTechnical(keyword: string): boolean {
+  return /^(python|javascript|typescript|java|c\+\+|react|node|angular|vue|aws|azure|gcp|docker|kubernetes|sql|nosql|postgresql|mongodb|redis|api|rest|graphql|ci\/cd|git|github|gitlab|jenkins|terraform|ansible|linux|unix|agile|scrum|kanban|devops|microservices|machine learning|ai|data science|blockchain|html|css|sass|webpack|npm|yarn)$/i.test(keyword);
+}
+
+function isTool(keyword: string): boolean {
+  return /^(jira|confluence|slack|teams|figma|sketch|adobe|excel|powerpoint|word|tableau|power bi|salesforce|hubspot|sap|erp|crm|quickbooks|asana|trello|notion|postman|swagger|datadog|splunk|grafana)$/i.test(keyword);
+}
+
+function isSoftSkill(keyword: string): boolean {
+  return /^(leadership|communication|teamwork|problem.solving|analytical|creative|adaptable|collaborative|strategic|organizational|time.management|critical.thinking|conflict.resolution|negotiation|mentoring)$/i.test(keyword);
+}
+
+function isCertification(keyword: string): boolean {
+  return /^(pmp|prince2|aws certified|azure certified|google cloud|scrum master|csm|psm|six sigma|lean|cpa|cfa|mba|phd|cissp|cism|comptia|itil)$/i.test(keyword);
+}
+
 // Generate detailed categorized recommendations
 export function generateDetailedRecommendations(
   resume: StructuredResume,
@@ -198,71 +247,81 @@ export function generateDetailedRecommendations(
   keywordAnalysis: { matched: string[]; missing: string[] }
 ): string[] {
   const recommendations: string[] = [];
-  
+
   // Categorize missing keywords
   const missingTechnical: string[] = [];
   const missingSoft: string[] = [];
   const missingTools: string[] = [];
   const missingCerts: string[] = [];
-  
+  const missingOther: string[] = [];
+
   keywordAnalysis.missing.forEach(keyword => {
-    if (TECHNICAL_PATTERNS.test(keyword)) missingTechnical.push(keyword);
-    else if (SOFT_PATTERNS.test(keyword)) missingSoft.push(keyword);
-    else if (TOOLS_PATTERNS.test(keyword)) missingTools.push(keyword);
-    else if (CERT_PATTERNS.test(keyword)) missingCerts.push(keyword);
+    if (isTechnical(keyword)) missingTechnical.push(keyword);
+    else if (isTool(keyword)) missingTools.push(keyword);
+    else if (isSoftSkill(keyword)) missingSoft.push(keyword);
+    else if (isCertification(keyword)) missingCerts.push(keyword);
+    else missingOther.push(keyword);
   });
-  
-  // Hard Skills recommendations
+
+  // Hard Skills recommendations - show specific missing tech
   if (missingTechnical.length > 0) {
-    recommendations.push(`Hard Skills: Add ${missingTechnical.slice(0, 3).join(', ')}`);
+    recommendations.push(`Skills: Add ${missingTechnical.slice(0, 4).join(', ')} to your resume`);
   }
-  
+
   // Tools recommendations
   if (missingTools.length > 0) {
-    recommendations.push(`Tools: Include ${missingTools.slice(0, 3).join(', ')}`);
+    recommendations.push(`Tools: Include experience with ${missingTools.slice(0, 3).join(', ')}`);
   }
-  
+
   // Soft Skills recommendations
   if (missingSoft.length > 0) {
-    recommendations.push(`Soft Skills: Highlight ${missingSoft.slice(0, 2).join(', ')}`);
+    recommendations.push(`Soft Skills: Demonstrate ${missingSoft.slice(0, 2).join(', ')}`);
   }
-  
+
   // Certifications
   if (missingCerts.length > 0) {
-    recommendations.push(`Certifications: ${missingCerts.slice(0, 2).join(', ')} preferred`);
+    recommendations.push(`Certifications: Consider ${missingCerts.slice(0, 2).join(', ')}`);
   }
-  
+
+  // Skills score check
+  const skills = Array.isArray(resume.skills) ? resume.skills : [];
+  const skillsInJob = skills.filter(s => jobDescription.toLowerCase().includes(s.toLowerCase()));
+  if (skills.length > 0 && skillsInJob.length < skills.length * 0.3) {
+    recommendations.push('Skills: Align your skills section with job requirements');
+  }
+
   // Experience recommendations
   const allBullets = resume.experience.flatMap(e => e.bullets);
-  const quantifiedCount = allBullets.filter(b => /\d+/.test(b)).length;
-  if (quantifiedCount < allBullets.length * 0.4) {
-    recommendations.push('Experience: Add metrics to 40%+ of achievements');
+  const quantifiedCount = allBullets.filter(b => /\d+%|\$[\d,]+|\d+\s*(users|customers|clients|projects|team|people)/i.test(b)).length;
+  if (allBullets.length > 0 && quantifiedCount < allBullets.length * 0.4) {
+    recommendations.push('Experience: Add metrics (%, $, numbers) to achievements');
   }
-  
-  // Summary optimization
+
+  // Summary optimization - check if key job terms are in summary
   const summary = (resume.summary || '').toLowerCase();
-  const hasTechnicalInSummary = TECHNICAL_PATTERNS.test(summary);
-  if (!hasTechnicalInSummary && keywordAnalysis.matched.some(k => TECHNICAL_PATTERNS.test(k))) {
-    recommendations.push('Summary: Move key technical skills to top');
+  const topMatchedTech = keywordAnalysis.matched.filter(k => isTechnical(k)).slice(0, 3);
+  const techNotInSummary = topMatchedTech.filter(k => !summary.includes(k.toLowerCase()));
+  if (techNotInSummary.length > 0 && topMatchedTech.length > 0) {
+    recommendations.push(`Summary: Mention ${techNotInSummary.slice(0, 2).join(', ')} in summary`);
   }
-  
+
   // Education
   const hasDegreeReq = /bachelor|master|mba|phd|degree/i.test(jobDescription);
   if (hasDegreeReq && resume.education.length === 0) {
     recommendations.push('Education: Add relevant degree or certifications');
   }
-  
-  // Keyword frequency
+
+  // Keyword frequency - find important keywords used only once
   const resumeText = resumeToText(resume).toLowerCase();
-  const topKeywords = keywordAnalysis.matched.slice(0, 5);
-  const lowFrequency = topKeywords.filter(k => {
+  const importantKeywords = keywordAnalysis.matched.filter(k => isTechnical(k) || isTool(k)).slice(0, 5);
+  const lowFrequency = importantKeywords.filter(k => {
     const count = (resumeText.match(new RegExp(`\\b${k}\\b`, 'gi')) || []).length;
-    return count < 2;
+    return count === 1;
   });
   if (lowFrequency.length > 0) {
-    recommendations.push(`Formatting: Repeat ${lowFrequency.slice(0, 2).join(', ')} 2+ times`);
+    recommendations.push(`Keywords: Use ${lowFrequency.slice(0, 2).join(', ')} more frequently`);
   }
-  
+
   return recommendations;
 }
 

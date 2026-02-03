@@ -7,42 +7,54 @@ async function extractJobMetadata(description: string) {
   const text = description.trim();
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  let role = 'Position';
-  let company = 'Company';
+  let role = '';
+  let company = '';
   let location = 'Remote';
 
-  // Common job title patterns
-  const rolePatternsExact = [
-    /(?:job\s*title|position|role)\s*[:\-]\s*(.+)/i,
-    /(?:we are (?:looking|hiring|seeking) (?:for )?(?:a|an)?\s*)(.+?(?:engineer|developer|manager|designer|analyst|specialist|coordinator|director|lead|architect|consultant|administrator|executive|officer|associate|intern|assistant))/i,
-    /(?:recruiting for (?:a|an)?\s*)(.+?(?:engineer|developer|manager|designer|analyst|specialist|coordinator|director|lead|architect|consultant|administrator|executive|officer|associate|intern|assistant))/i,
-  ];
+  // Job title keywords
+  const titleKeywords = /(?:engineer|developer|manager|designer|analyst|specialist|coordinator|director|lead|architect|consultant|administrator|executive|officer|associate|intern|assistant|scientist|researcher|programmer|accountant|recruiter)/i;
 
-  // Common company patterns
-  const companyPatterns = [
-    /(?:company|employer|organization)\s*[:\-]\s*(.+)/i,
-    /(?:at|join)\s+([A-Z][A-Za-z0-9\s&.]+?)(?:,|\.|!|\s+we|\s+is|\s+are|\s+you)/,
-    /([A-Z][A-Za-z0-9\s&.]+?)\s+is\s+(?:looking|hiring|seeking|recruiting)/,
-  ];
-
-  // Location patterns
-  const locationPatterns = [
-    /(?:location|based in|located in)\s*[:\-]\s*(.+)/i,
-    /(?:remote|hybrid|on-?site|in-?office)/i,
-  ];
-
-  // Try to extract role
-  for (const pattern of rolePatternsExact) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      role = match[1].trim().replace(/[.,!]$/, '');
-      break;
+  // Check if first line looks like a job title (short and contains title keyword)
+  if (lines[0] && lines[0].length < 120 && titleKeywords.test(lines[0])) {
+    // First line might be "Senior Project Manager - Company - Location" format
+    const parts = lines[0].split(/\s*[-–|]\s*/);
+    if (parts.length >= 1) {
+      role = parts[0].trim();
+      // Check if any other part might be company name (capitalized, not a location keyword)
+      for (let i = 1; i < parts.length; i++) {
+        const part = parts[i].trim();
+        if (!/^(remote|hybrid|on-?site|in-?office|full-?time|part-?time|contract|permanent|outside|inside|ir35)/i.test(part)) {
+          if (!company && /^[A-Z]/.test(part)) {
+            company = part;
+          }
+        }
+        if (/remote|hybrid|on-?site/i.test(part)) {
+          location = part;
+        }
+      }
     }
   }
 
-  // If no role found, check first few lines for job title keywords
-  if (role === 'Position') {
-    const titleKeywords = /(?:engineer|developer|manager|designer|analyst|specialist|coordinator|director|lead|architect|consultant|administrator|executive|officer|associate|intern|assistant|scientist|researcher)/i;
+  // If no role found, try other patterns
+  if (!role) {
+    const rolePatterns = [
+      /(?:job\s*title|position|role)\s*[:\-]\s*(.+)/i,
+      /(?:we are (?:looking|hiring|seeking) (?:for )?(?:a|an)?\s*)(.+?(?:engineer|developer|manager|designer|analyst|specialist|coordinator|director|lead|architect|consultant|administrator|executive|officer|associate|intern|assistant)[a-z]*)/i,
+      /(?:recruiting for (?:a|an)?\s*)(.+?(?:engineer|developer|manager|designer|analyst|specialist|coordinator|director|lead|architect|consultant|administrator|executive|officer|associate|intern|assistant)[a-z]*)/i,
+      /(?:seeking (?:a|an)?\s*)(.+?(?:engineer|developer|manager|designer|analyst|specialist|coordinator|director|lead|architect|consultant|administrator|executive|officer|associate|intern|assistant)[a-z]*)/i,
+    ];
+
+    for (const pattern of rolePatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        role = match[1].trim().replace(/[.,!]$/, '');
+        break;
+      }
+    }
+  }
+
+  // Still no role? Check first few lines for job title keywords
+  if (!role) {
     for (const line of lines.slice(0, 5)) {
       if (titleKeywords.test(line) && line.length < 100) {
         role = line.replace(/[.,!:]+$/, '').trim();
@@ -51,16 +63,35 @@ async function extractJobMetadata(description: string) {
     }
   }
 
-  // Try to extract company
-  for (const pattern of companyPatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      company = match[1].trim().replace(/[.,!]$/, '');
-      break;
+  // Try to extract company if not found
+  if (!company) {
+    const companyPatterns = [
+      /(?:company|employer|organization)\s*[:\-]\s*(.+)/i,
+      /(?:^|\s)at\s+([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,3})(?:,|\.|!|\s+we|\s+is|\s+are|\s+you)/,
+      /(?:^|\s)join\s+([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,3})(?:,|\.|!|\s+as|\s+and|\s+to)/i,
+      /([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,3})\s+is\s+(?:looking|hiring|seeking|recruiting)/,
+      /([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,3})\s+(?:are|is)\s+(?:currently\s+)?(?:looking|hiring|seeking|recruiting)/,
+    ];
+
+    for (const pattern of companyPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const extracted = match[1].trim().replace(/[.,!]$/, '');
+        // Avoid extracting generic words as company
+        if (!/^(We|The|Our|This|A|An)$/i.test(extracted) && extracted.length > 1) {
+          company = extracted;
+          break;
+        }
+      }
     }
   }
 
   // Try to extract location
+  const locationPatterns = [
+    /(?:location|based in|located in)\s*[:\-]\s*(.+)/i,
+    /\b(remote|hybrid|on-?site|in-?office)\b/i,
+  ];
+
   for (const pattern of locationPatterns) {
     const match = text.match(pattern);
     if (match) {
@@ -73,7 +104,11 @@ async function extractJobMetadata(description: string) {
   if (role.length > 80) role = role.substring(0, 80) + '...';
   if (company.length > 50) company = company.substring(0, 50) + '...';
 
-  return { role, company, location };
+  return {
+    role: role || 'Position',
+    company: company || 'Company',
+    location: location || 'Remote'
+  };
 }
 
 // POST: Create new application

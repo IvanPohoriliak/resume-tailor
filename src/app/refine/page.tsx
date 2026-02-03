@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/client';
 import { StructuredResume } from '@/types';
-import { ATSBreakdown } from '@/lib/utils/ats';
+import { ATSBreakdown, calculateATSScore } from '@/lib/utils/ats';
 
 interface ApplicationFromDB {
   id: string;
@@ -95,15 +95,17 @@ function RefinePageContent() {
       if (app) {
         setJobDescription(app.job_description);
         setTailoredResume(app.tailored_resume);
-        setAtsScore(app.ats_score);
-        
-        // Handle both old format (simple keywords) and new format (recommendations)
-        const missingData = app.keywords?.missing || [];
-        setKeywords({
-          matched: app.keywords?.matched || [],
-          missing: Array.isArray(missingData) ? missingData : [missingData]
-        });
         setCurrentApplicationId(app.id);
+
+        // Recalculate ATS score to get fresh breakdown
+        const atsResult = calculateATSScore(app.tailored_resume, app.job_description);
+        setAtsScore(atsResult.score);
+        setBreakdown(atsResult.breakdown);
+        setMissingKeywords(atsResult.missingKeywords);
+        setKeywords({
+          matched: atsResult.keywords.matched,
+          missing: atsResult.recommendations
+        });
       }
     } catch (error) {
       console.error('Error loading application:', error);
