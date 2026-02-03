@@ -138,7 +138,7 @@ function RefinePageContent() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/tailor', {
+      const response = await fetch('/api/application', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
