@@ -182,11 +182,86 @@ function scoreOtherFactors(resume: StructuredResume, jobDescription: string): nu
   return Math.min(score, 25); // Max 25 points for other factors
 }
 
-// Main improved calculation with simple output
+// Generate detailed categorized recommendations
+export function generateDetailedRecommendations(
+  resume: StructuredResume,
+  jobDescription: string,
+  keywordAnalysis: { matched: string[]; missing: string[] }
+): string[] {
+  const recommendations: string[] = [];
+  
+  // Categorize missing keywords
+  const missingTechnical: string[] = [];
+  const missingSoft: string[] = [];
+  const missingTools: string[] = [];
+  const missingCerts: string[] = [];
+  
+  keywordAnalysis.missing.forEach(keyword => {
+    if (TECHNICAL_PATTERNS.test(keyword)) missingTechnical.push(keyword);
+    else if (SOFT_PATTERNS.test(keyword)) missingSoft.push(keyword);
+    else if (TOOLS_PATTERNS.test(keyword)) missingTools.push(keyword);
+    else if (CERT_PATTERNS.test(keyword)) missingCerts.push(keyword);
+  });
+  
+  // Hard Skills recommendations
+  if (missingTechnical.length > 0) {
+    recommendations.push(`Hard Skills: Add ${missingTechnical.slice(0, 3).join(', ')}`);
+  }
+  
+  // Tools recommendations
+  if (missingTools.length > 0) {
+    recommendations.push(`Tools: Include ${missingTools.slice(0, 3).join(', ')}`);
+  }
+  
+  // Soft Skills recommendations
+  if (missingSoft.length > 0) {
+    recommendations.push(`Soft Skills: Highlight ${missingSoft.slice(0, 2).join(', ')}`);
+  }
+  
+  // Certifications
+  if (missingCerts.length > 0) {
+    recommendations.push(`Certifications: ${missingCerts.slice(0, 2).join(', ')} preferred`);
+  }
+  
+  // Experience recommendations
+  const allBullets = resume.experience.flatMap(e => e.bullets);
+  const quantifiedCount = allBullets.filter(b => /\d+/.test(b)).length;
+  if (quantifiedCount < allBullets.length * 0.4) {
+    recommendations.push('Experience: Add metrics to 40%+ of achievements');
+  }
+  
+  // Summary optimization
+  const summary = (resume.summary || '').toLowerCase();
+  const hasTechnicalInSummary = TECHNICAL_PATTERNS.test(summary);
+  if (!hasTechnicalInSummary && keywordAnalysis.matched.some(k => TECHNICAL_PATTERNS.test(k))) {
+    recommendations.push('Summary: Move key technical skills to top');
+  }
+  
+  // Education
+  const hasDegreeReq = /bachelor|master|mba|phd|degree/i.test(jobDescription);
+  if (hasDegreeReq && resume.education.length === 0) {
+    recommendations.push('Education: Add relevant degree or certifications');
+  }
+  
+  // Keyword frequency
+  const resumeText = resumeToText(resume).toLowerCase();
+  const topKeywords = keywordAnalysis.matched.slice(0, 5);
+  const lowFrequency = topKeywords.filter(k => {
+    const count = (resumeText.match(new RegExp(`\\b${k}\\b`, 'gi')) || []).length;
+    return count < 2;
+  });
+  if (lowFrequency.length > 0) {
+    recommendations.push(`Formatting: Repeat ${lowFrequency.slice(0, 2).join(', ')} 2+ times`);
+  }
+  
+  return recommendations;
+}
+
+// Main improved calculation with detailed recommendations
 export function calculateATSScore(
   resume: StructuredResume,
   jobDescription: string
-): { score: number; keywords: Keywords } {
+): { score: number; keywords: Keywords; recommendations: string[] } {
   
   const jobKeywords = extractKeywords(jobDescription);
   
@@ -198,62 +273,30 @@ export function calculateATSScore(
   // Total: 50 (keywords) + 25 (experience) + 25 (other) = 100
   const totalScore = keywordAnalysis.score + experienceScore + otherScore;
   
-  // Return simple format (backwards compatible)
+  // Generate detailed recommendations
+  const recommendations = generateDetailedRecommendations(
+    resume,
+    jobDescription,
+    keywordAnalysis
+  );
+  
+  // Return with recommendations replacing simple missing list
   return {
     score: Math.min(Math.round(totalScore), 100),
     keywords: {
       matched: keywordAnalysis.matched,
-      missing: keywordAnalysis.missing.slice(0, 5) // Top 5 missing
-    }
+      missing: recommendations // Detailed categorized recommendations instead of simple list
+    },
+    recommendations
   };
 }
 
-// Helper: Generate improved recommendations based on score breakdown
+// Keep legacy function for compatibility
 export function generateATSRecommendations(
   resume: StructuredResume,
   jobDescription: string,
   currentScore: number
 ): string[] {
-  const recommendations: string[] = [];
-  const jobKeywords = extractKeywords(jobDescription);
-  const keywordAnalysis = calculateWeightedKeywordScore(resume, jobKeywords);
-  
-  // Keyword-based recommendations
-  if (keywordAnalysis.missing.length > 0) {
-    const topMissing = keywordAnalysis.missing.slice(0, 3);
-    recommendations.push(`Add these key skills: ${topMissing.join(', ')}`);
-  }
-  
-  // Technical skills in summary
-  const summary = (resume.summary || '').toLowerCase();
-  const hasTechnicalInSummary = TECHNICAL_PATTERNS.test(summary);
-  if (!hasTechnicalInSummary && keywordAnalysis.matched.some(k => TECHNICAL_PATTERNS.test(k))) {
-    recommendations.push('Move key technical skills to your professional summary for 30% score boost');
-  }
-  
-  // Quantification
-  const allBullets = resume.experience.flatMap(e => e.bullets);
-  const quantifiedCount = allBullets.filter(b => /\d+/.test(b)).length;
-  if (quantifiedCount < allBullets.length * 0.4) {
-    recommendations.push('Add numbers/metrics to your achievements (can add +10 points)');
-  }
-  
-  // Education
-  const hasDegreeReq = /bachelor|master|mba|degree/i.test(jobDescription);
-  if (hasDegreeReq && resume.education.length === 0) {
-    recommendations.push('Add relevant education or certifications (+15 points)');
-  }
-  
-  // Keyword frequency
-  const resumeText = resumeToText(resume).toLowerCase();
-  const topKeywords = keywordAnalysis.matched.slice(0, 5);
-  const lowFrequency = topKeywords.filter(k => {
-    const count = (resumeText.match(new RegExp(`\\b${k}\\b`, 'gi')) || []).length;
-    return count < 2;
-  });
-  if (lowFrequency.length > 0) {
-    recommendations.push(`Mention these skills more than once: ${lowFrequency.slice(0, 2).join(', ')}`);
-  }
-  
-  return recommendations.slice(0, 3);
+  const result = calculateATSScore(resume, jobDescription);
+  return result.recommendations;
 }

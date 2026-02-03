@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { tailorResume, extractJobMetadata } from '@/lib/ai/tailoring';
 import { calculateATSScore } from '@/lib/utils/ats';
 
+// Helper to extract job metadata from description
+async function extractJobMetadata(description: string) {
+  const lines = description.split('\n');
+  return {
+    role: lines[0] || 'Position',
+    company: lines[1] || 'Company',
+    location: 'Remote',
+  };
+}
+
+// POST: Create new application
 export async function POST(request: NextRequest) {
   try {
     const supabase = createClient();
@@ -12,38 +22,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { resumeId, jobDescription } = await request.json();
+    const { resumeId, jobDescription, tailoredResume } = await request.json();
 
-    if (!resumeId || !jobDescription) {
-      return NextResponse.json(
-        { error: 'Resume ID and job description are required' },
-        { status: 400 }
-      );
-    }
-
-    // Check usage limits (free tier: 5 per month)
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
+    // Check usage limits
     const { count } = await supabase
       .from('applications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', startOfMonth.toISOString());
+      .eq('user_id', user.id);
 
-    // Get user subscription
-    const { data: userData } = await supabase
-      .from('users')
-      .select('subscription')
-      .eq('id', user.id)
-      .single();
-
-    const subscription = userData?.subscription || 'free';
-    
-    if (subscription === 'free' && (count || 0) >= 5) {
+    if (count && count >= 10) {
       return NextResponse.json(
-        { error: 'Monthly limit reached. Upgrade to Pro for unlimited tailoring.' },
+        { error: 'Free tier limit reached. Upgrade to Pro for unlimited tailoring.' },
         { status: 403 }
       );
     }
@@ -63,11 +52,11 @@ export async function POST(request: NextRequest) {
     // Extract job metadata
     const jobMetadata = await extractJobMetadata(jobDescription);
 
-    // Tailor resume
-    const tailoredResume = await tailorResume(resume.structured, jobDescription);
-
-    // Calculate ATS score
-    const { score, keywords } = calculateATSScore(tailoredResume, jobDescription);
+    // Calculate ATS score with detailed recommendations
+    const { score, keywords, recommendations } = calculateATSScore(
+      tailoredResume || resume.structured, 
+      jobDescription
+    );
 
     // Save application
     const { data: application, error: appError } = await supabase
@@ -77,9 +66,12 @@ export async function POST(request: NextRequest) {
         resume_id: resumeId,
         job_description: jobDescription,
         job_metadata: jobMetadata,
-        tailored_resume: tailoredResume,
+        tailored_resume: tailoredResume || resume.structured,
         ats_score: score,
-        keywords: keywords,
+        keywords: {
+          matched: keywords.matched,
+          missing: recommendations // Store detailed recommendations instead of simple keywords
+        },
         status: 'applied',
       })
       .select()
