@@ -298,11 +298,16 @@ function RefinePageContent() {
           <h1 className="text-3xl font-bold">
             {isViewMode ? 'View Resume' : 'Tailor Your Resume'}
           </h1>
-          {isViewMode && (
-            <Link href="/refine">
-              <Button>+ Create New</Button>
+          <div className="flex gap-2">
+            <Link href="/dashboard">
+              <Button variant="outline">Dashboard</Button>
             </Link>
-          )}
+            {isViewMode && (
+              <Link href="/refine">
+                <Button>+ Create New</Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         <div className={isViewMode ? '' : 'grid lg:grid-cols-2 gap-8'}>
