@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { createClient } from '@/lib/supabase/client';
 import { StructuredResume } from '@/types';
 
+// Raw type from Supabase (snake_case)
 interface ApplicationFromDB {
   id: string;
   user_id: string;
@@ -20,7 +21,7 @@ interface ApplicationFromDB {
   ats_score: number;
   keywords: {
     matched: string[];
-    missing: string[] | string; // Can be array of recommendations or simple keywords
+    missing: string[];
   };
   status: string;
   applied_date?: string;
@@ -33,11 +34,19 @@ interface Resume {
   structured: StructuredResume;
 }
 
+// Helper to safely format skills
+const formatSkills = (skills: any): string => {
+  if (!skills) return '';
+  if (Array.isArray(skills)) return skills.join(' • ');
+  if (typeof skills === 'object') return Object.values(skills).flat().filter(Boolean).join(' • ');
+  return String(skills);
+};
+
 function RefinePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationId = searchParams.get('id');
-  const isViewMode = !!applicationId;
+  const isViewMode = !!applicationId; // If ID exists, we're viewing existing application
 
   const [user, setUser] = useState<any>(null);
   const [resume, setResume] = useState<Resume | null>(null);
@@ -93,13 +102,7 @@ function RefinePageContent() {
         setJobDescription(app.job_description);
         setTailoredResume(app.tailored_resume);
         setAtsScore(app.ats_score);
-        
-        // Handle both old format (simple keywords) and new format (recommendations)
-        const missingData = app.keywords?.missing || [];
-        setKeywords({
-          matched: app.keywords?.matched || [],
-          missing: Array.isArray(missingData) ? missingData : [missingData]
-        });
+        setKeywords(app.keywords);
         setCurrentApplicationId(app.id);
       }
     } catch (error) {
@@ -120,25 +123,30 @@ function RefinePageContent() {
         method: 'POST',
         body: formData,
       });
-
-      if (!response.ok) throw new Error('Upload failed');
-
       const data = await response.json();
-      setResume(data.resume);
+      if (data.resume) {
+        setResume(data.resume);
+        alert('Resume uploaded successfully!');
+      } else {
+        alert('Error uploading resume');
+      }
     } catch (error) {
-      console.error('Error uploading resume:', error);
-      alert('Failed to upload resume');
+      console.error('Upload error:', error);
+      alert('Error uploading resume');
     } finally {
       setUploading(false);
     }
   };
 
   const handleTailorResume = async () => {
-    if (!resume || !jobDescription) return;
+    if (!resume || !jobDescription) {
+      alert('Please upload a resume and enter job description');
+      return;
+    }
 
     setLoading(true);
     try {
-      const response = await fetch('/api/tailor', {
+      const response = await fetch('/api/application', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,435 +159,518 @@ function RefinePageContent() {
       if (data.application) {
         setTailoredResume(data.application.tailored_resume);
         setAtsScore(data.application.ats_score);
-        
-        // Handle both formats
-        const missingData = data.application.keywords?.missing || [];
-        setKeywords({
-          matched: data.application.keywords?.matched || [],
-          missing: Array.isArray(missingData) ? missingData : [missingData]
-        });
+        setKeywords(data.application.keywords);
         setCurrentApplicationId(data.application.id);
+      } else {
+        alert(data.error || 'Error tailoring resume');
       }
     } catch (error) {
-      console.error('Error tailoring resume:', error);
-      alert('Failed to tailor resume');
+      console.error('Tailoring error:', error);
+      alert('Error tailoring resume');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = (section: string, currentContent: string) => {
-    setEditingSection(section);
-    setEditText(currentContent);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingSection || !tailoredResume || !currentApplicationId) return;
-
-    const updatedResume = { ...tailoredResume };
-    
-    if (editingSection === 'summary') {
-      updatedResume.summary = editText;
-    } else if (editingSection.startsWith('exp-')) {
-      const expIndex = parseInt(editingSection.split('-')[1]);
-      updatedResume.experience[expIndex].bullets = editText.split('\n').filter(b => b.trim());
-    } else if (editingSection === 'skills') {
-      updatedResume.skills = editText.split(',').map(s => s.trim()).filter(Boolean);
+  const handleDownload = async (format: 'docx' | 'pdf') => {
+    if (!currentApplicationId) {
+      alert('Please tailor your resume first');
+      return;
     }
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('applications')
-        .update({ tailored_resume: updatedResume })
-        .eq('id', currentApplicationId);
-
-      if (error) throw error;
-
-      setTailoredResume(updatedResume);
-      setEditingSection(null);
-      setEditText('');
-    } catch (error) {
-      console.error('Error saving edit:', error);
-      alert('Failed to save changes');
-    }
-  };
-
-  const handleAIRewrite = async () => {
-    if (!editingSection || !editText || !jobDescription) return;
-
-    setRewriting(true);
-    try {
-      const response = await fetch('/api/rewrite', {
+      const response = await fetch('/api/document/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: editText,
-          jobDescription,
-          section: editingSection,
+          applicationId: currentApplicationId,
+          format,
         }),
       });
 
       const data = await response.json();
-      if (data.rewrittenContent) {
-        setEditText(data.rewrittenContent);
+      if (data.url) {
+        window.open(data.url, '_blank');
+      } else {
+        alert('Error generating document');
       }
     } catch (error) {
-      console.error('Error rewriting:', error);
-      alert('Failed to rewrite content');
+      console.error('Download error:', error);
+      alert('Error generating document');
+    }
+  };
+
+  const handleEdit = (section: string, currentText: string) => {
+    setEditingSection(section);
+    setEditText(currentText);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!tailoredResume || !editingSection) return;
+
+    const updatedResume = { ...tailoredResume };
+
+    if (editingSection === 'summary') {
+      updatedResume.summary = editText;
+    } else if (editingSection.startsWith('experience-')) {
+      const match = editingSection.match(/experience-(\d+)-bullet-(\d+)/);
+      if (match) {
+        const expIdx = parseInt(match[1]);
+        const bulletIdx = parseInt(match[2]);
+        updatedResume.experience[expIdx].bullets[bulletIdx] = editText;
+      }
+    } else if (editingSection.startsWith('education-')) {
+      const match = editingSection.match(/education-(\d+)/);
+      if (match) {
+        const eduIdx = parseInt(match[1]);
+        updatedResume.education[eduIdx].details = editText;
+      }
+    } else if (editingSection === 'skills') {
+      updatedResume.skills = editText.split('•').map(s => s.trim()).filter(Boolean);
+    }
+
+    setTailoredResume(updatedResume);
+    setEditingSection(null);
+
+    if (currentApplicationId) {
+      await fetch(`/api/application/${currentApplicationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tailored_resume: updatedResume }),
+      });
+    }
+  };
+
+  const handleRewrite = async (instruction: string) => {
+    if (!editText || !jobDescription) return;
+
+    setRewriting(true);
+    try {
+      const response = await fetch('/api/ai/rewrite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          original: editText,
+          instruction,
+          jobContext: jobDescription,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.rewritten) {
+        setEditText(data.rewritten);
+      }
+    } catch (error) {
+      console.error('Rewrite error:', error);
+      alert('Error rewriting text');
     } finally {
       setRewriting(false);
     }
   };
 
-  const handleDownload = async (format: 'docx' | 'pdf') => {
-    if (!currentApplicationId) return;
-
-    try {
-      const response = await fetch(
-        `/api/document/generate?applicationId=${currentApplicationId}&format=${format}`
-      );
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `resume.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Error downloading:', error);
-      alert('Failed to download resume');
-    }
-  };
-
-  // Helper to format skills (handle different data types)
-  const formatSkills = (skills: any): string => {
-    if (Array.isArray(skills)) return skills.join(', ');
-    if (typeof skills === 'object' && skills !== null) {
-      return Object.values(skills).flat().join(', ');
-    }
-    if (typeof skills === 'string') return skills;
-    return '';
-  };
-
-  // Check if missing data is recommendations (new format) or simple keywords (old format)
-  const isRecommendationsFormat = (missing: string[]): boolean => {
-    if (missing.length === 0) return false;
-    // Recommendations typically start with category labels like "Hard Skills:", "Experience:", etc.
-    return missing.some(item => 
-      item.includes('Hard Skills:') || 
-      item.includes('Soft Skills:') || 
-      item.includes('Tools:') ||
-      item.includes('Experience:') ||
-      item.includes('Summary:') ||
-      item.includes('Education:') ||
-      item.includes('Formatting:') ||
-      item.includes('Certifications:')
-    );
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-4">
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">
-            {isViewMode ? 'View Resume' : 'Tailor Your Resume'}
-          </h1>
-          {isViewMode && (
-            <Link href="/refine">
-              <Button>+ Create New</Button>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <Link href="/" className="text-2xl font-bold text-blue-600">
+            Resume Tailor
+          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard">
+              <Button variant="outline">Dashboard</Button>
             </Link>
-          )}
+          </div>
         </div>
+      </header>
 
-        <div className={isViewMode ? '' : 'grid lg:grid-cols-2 gap-8'}>
-          {/* Left Column - Input (only show if NOT viewing existing) */}
-          {!isViewMode && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>1. Upload Master Resume</CardTitle>
-                  <CardDescription>Upload your DOCX resume file</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <input
-                      type="file"
-                      accept=".docx"
-                      onChange={handleFileUpload}
-                      disabled={uploading}
-                      className="w-full"
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold">
+              {isViewMode ? 'View Resume' : 'Tailor Your Resume'}
+            </h1>
+            {isViewMode && (
+              <Link href="/refine">
+                <Button>+ Create New</Button>
+              </Link>
+            )}
+          </div>
+
+          <div className={isViewMode ? '' : 'grid lg:grid-cols-2 gap-8'}>
+            {/* Left Column - Input (only show if NOT viewing existing) */}
+            {!isViewMode && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>1. Upload Master Resume</CardTitle>
+                    <CardDescription>Upload your DOCX resume file</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <Input
+                        type="file"
+                        accept=".docx"
+                        onChange={handleFileUpload}
+                        disabled={uploading}
+                        className="cursor-pointer"
+                      />
+                      {resume && (
+                        <div className="text-sm text-green-600">
+                          ✓ Resume uploaded: {resume.structured?.contact?.name || 'Unnamed'}
+                        </div>
+                      )}
+                      {uploading && <div className="text-sm text-gray-500">Uploading...</div>}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>2. Paste Job Description</CardTitle>
+                    <CardDescription>Copy and paste the full job description</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Textarea
+                      placeholder="Paste job description here..."
+                      className="min-h-[300px]"
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value)}
                     />
-                    {resume && (
-                      <div className="text-sm text-green-600">
-                        ✓ Resume uploaded: {resume.structured?.contact?.name || 'Unnamed'}
+                  </CardContent>
+                </Card>
+
+                <Button
+                  onClick={handleTailorResume}
+                  disabled={loading || !resume || !jobDescription}
+                  className="w-full"
+                  size="lg"
+                >
+                  {loading ? 'Tailoring Resume...' : 'Tailor Resume'}
+                </Button>
+              </div>
+            )}
+
+            {/* Right Column - Preview (always show if we have tailored resume) */}
+            {tailoredResume && (
+              <div className={`space-y-6 ${isViewMode ? 'max-w-4xl mx-auto' : ''}`}>
+                {/* ATS Score */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex justify-between items-center">
+                      <span>ATS Score</span>
+                      <span className={`text-2xl ${atsScore >= 80 ? 'text-green-600' : atsScore >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                        {atsScore}%
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {keywords.missing.length > 0 && (
+                      <div className="text-sm">
+                        <p className="font-medium mb-1">Missing keywords:</p>
+                        <p className="text-gray-600">{keywords.missing.slice(0, 10).join(', ')}</p>
                       </div>
                     )}
-                    {uploading && <div className="text-sm text-gray-500">Uploading...</div>}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>2. Paste Job Description</CardTitle>
-                  <CardDescription>Copy and paste the full job description</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    placeholder="Paste job description here..."
-                    className="min-h-[300px]"
-                    value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
-                  />
-                </CardContent>
-              </Card>
-
-              <Button
-                onClick={handleTailorResume}
-                disabled={loading || !resume || !jobDescription}
-                className="w-full"
-                size="lg"
-              >
-                {loading ? 'Tailoring Resume...' : 'Tailor Resume'}
-              </Button>
-            </div>
-          )}
-
-          {/* Right Column - Preview (always show if we have tailored resume) */}
-          {tailoredResume && (
-            <div className={`space-y-6 ${isViewMode ? 'max-w-4xl mx-auto' : ''}`}>
-              {/* ATS Score */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex justify-between items-center">
-                    <span>ATS Score</span>
-                    <span className={`text-2xl ${atsScore >= 80 ? 'text-green-600' : atsScore >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                      {atsScore}%
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {keywords.missing.length > 0 && (
-                    <div className="text-sm space-y-2">
-                      {isRecommendationsFormat(keywords.missing) ? (
-                        // New format: Detailed categorized recommendations
-                        <>
-                          <p className="font-medium mb-2">Recommendations:</p>
-                          <div className="space-y-1">
-                            {keywords.missing.map((recommendation, idx) => (
-                              <p key={idx} className="text-gray-700 leading-relaxed">
-                                {recommendation}
-                              </p>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        // Old format: Simple missing keywords
-                        <>
-                          <p className="font-medium mb-1">Missing keywords:</p>
-                          <p className="text-gray-600">{keywords.missing.slice(0, 10).join(', ')}</p>
-                        </>
-                      )}
+                {/* Preview */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Preview & Edit</CardTitle>
+                    <CardDescription>Click Edit on any section to modify</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Contact */}
+                    <div className="text-center border-b pb-4">
+                      <h2 className="text-2xl font-bold">{tailoredResume.contact.name}</h2>
+                      <p className="text-sm text-gray-600">
+                        {[
+                          tailoredResume.contact.email,
+                          tailoredResume.contact.phone,
+                          tailoredResume.contact.linkedin
+                        ].filter(Boolean).join(' | ')}
+                      </p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
 
-              {/* Preview */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Preview & Edit</CardTitle>
-                  <CardDescription>Click Edit on any section to modify</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Contact */}
-                  <div className="text-center border-b pb-4">
-                    <h2 className="text-2xl font-bold">{tailoredResume.contact.name}</h2>
-                    <p className="text-sm text-gray-600">
-                      {[
-                        tailoredResume.contact.email,
-                        tailoredResume.contact.phone,
-                        tailoredResume.contact.linkedin
-                      ].filter(Boolean).join(' | ')}
-                    </p>
-                  </div>
-
-                  {/* Summary */}
-                  {tailoredResume.summary && (
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-bold">PROFESSIONAL SUMMARY</h3>
-                        {editingSection !== 'summary' && !isViewMode && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEdit('summary', tailoredResume.summary!)}
-                          >
-                            Edit
-                          </Button>
-                        )}
-                      </div>
-                      {editingSection === 'summary' ? (
-                        <div className="space-y-2">
-                          <Textarea
-                            value={editText}
-                            onChange={(e) => setEditText(e.target.value)}
-                            className="min-h-[100px]"
-                          />
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleSaveEdit}>Save</Button>
-                            <Button size="sm" variant="outline" onClick={() => setEditingSection(null)}>Cancel</Button>
-                            <Button 
-                              size="sm" 
-                              variant="secondary" 
-                              onClick={handleAIRewrite}
-                              disabled={rewriting}
+                    {/* Summary */}
+                    {tailoredResume.summary && (
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-bold">PROFESSIONAL SUMMARY</h3>
+                          {editingSection !== 'summary' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEdit('summary', tailoredResume.summary!)}
                             >
-                              {rewriting ? 'Rewriting...' : 'AI Rewrite'}
+                              Edit
                             </Button>
-                          </div>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-sm text-gray-700">{tailoredResume.summary}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Experience */}
-                  <div>
-                    <h3 className="font-bold mb-3">EXPERIENCE</h3>
-                    <div className="space-y-4">
-                      {tailoredResume.experience.map((exp, idx) => (
-                        <div key={idx}>
-                          <div className="flex justify-between items-start mb-1">
-                            <div>
-                              <p className="font-semibold">{exp.role}</p>
-                              <p className="text-sm text-gray-600">{exp.company} • {exp.dates}</p>
-                            </div>
-                            {editingSection !== `exp-${idx}` && !isViewMode && (
+                        {editingSection === 'summary' ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value)}
+                              className="min-h-[100px]"
+                            />
+                            <div className="flex gap-2 flex-wrap">
+                              <Button size="sm" onClick={handleSaveEdit}>
+                                Save
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleEdit(`exp-${idx}`, exp.bullets.join('\n'))}
+                                onClick={() => handleRewrite('more impactful')}
+                                disabled={rewriting}
                               >
-                                Edit
+                                {rewriting ? 'Rewriting...' : '✨ More Impactful'}
                               </Button>
-                            )}
-                          </div>
-                          {editingSection === `exp-${idx}` ? (
-                            <div className="space-y-2 mt-2">
-                              <Textarea
-                                value={editText}
-                                onChange={(e) => setEditText(e.target.value)}
-                                className="min-h-[150px]"
-                                placeholder="One bullet point per line"
-                              />
-                              <div className="flex gap-2">
-                                <Button size="sm" onClick={handleSaveEdit}>Save</Button>
-                                <Button size="sm" variant="outline" onClick={() => setEditingSection(null)}>Cancel</Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="secondary" 
-                                  onClick={handleAIRewrite}
-                                  disabled={rewriting}
-                                >
-                                  {rewriting ? 'Rewriting...' : 'AI Rewrite'}
-                                </Button>
-                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRewrite('more technical')}
+                                disabled={rewriting}
+                              >
+                                {rewriting ? 'Rewriting...' : '🔧 More Technical'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRewrite('more concise')}
+                                disabled={rewriting}
+                              >
+                                {rewriting ? 'Rewriting...' : '✂️ More Concise'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingSection(null)}
+                              >
+                                Cancel
+                              </Button>
                             </div>
-                          ) : (
-                            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-                              {exp.bullets.map((bullet, bidx) => (
-                                <li key={bidx}>{bullet}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Education */}
-                  {tailoredResume.education.length > 0 && (
-                    <div>
-                      <h3 className="font-bold mb-2">EDUCATION</h3>
-                      {tailoredResume.education.map((edu, idx) => (
-                        <div key={idx} className="text-sm">
-                          <p className="font-semibold">{edu.degree}</p>
-                          <p className="text-gray-600">{edu.school} • {edu.dates}</p>
-                          {edu.details && <p className="text-gray-700">{edu.details}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Skills */}
-                  {tailoredResume.skills && (
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-bold">SKILLS</h3>
-                        {editingSection !== 'skills' && !isViewMode && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEdit('skills', formatSkills(tailoredResume.skills))}
-                          >
-                            Edit
-                          </Button>
+                          </div>
+                        ) : (
+                          <p className="text-sm">{tailoredResume.summary}</p>
                         )}
                       </div>
-                      {editingSection === 'skills' ? (
-                        <div className="space-y-2">
-                          <Textarea
-                            value={editText}
-                            onChange={(e) => setEditText(e.target.value)}
-                            className="min-h-[80px]"
-                          />
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleSaveEdit}>Save</Button>
-                            <Button size="sm" variant="outline" onClick={() => setEditingSection(null)}>Cancel</Button>
+                    )}
+
+                    {/* Experience */}
+                    <div>
+                      <h3 className="font-bold mb-3">EXPERIENCE</h3>
+                      {tailoredResume.experience.map((exp, expIdx) => (
+                        <div key={expIdx} className="mb-4">
+                          <div className="flex justify-between">
+                            <div>
+                              <p className="font-semibold">{exp.role}</p>
+                              <p className="text-sm text-gray-600">{exp.company}</p>
+                            </div>
+                            <p className="text-sm text-gray-600">{exp.dates}</p>
                           </div>
+                          <ul className="list-disc list-inside mt-2 space-y-2">
+                            {exp.bullets.map((bullet, bulletIdx) => {
+                              const sectionId = `experience-${expIdx}-bullet-${bulletIdx}`;
+                              return (
+                                <li key={bulletIdx} className="text-sm">
+                                  {editingSection === sectionId ? (
+                                    <div className="space-y-2 ml-[-20px]">
+                                      <Textarea
+                                        value={editText}
+                                        onChange={(e) => setEditText(e.target.value)}
+                                        className="min-h-[60px]"
+                                      />
+                                      <div className="flex gap-2 flex-wrap">
+                                        <Button size="sm" onClick={handleSaveEdit}>
+                                          Save
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => handleRewrite('more impactful')}
+                                          disabled={rewriting}
+                                        >
+                                          {rewriting ? 'Rewriting...' : '✨ More Impactful'}
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => handleRewrite('more quantifiable')}
+                                          disabled={rewriting}
+                                        >
+                                          {rewriting ? 'Rewriting...' : '📊 More Quantifiable'}
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => setEditingSection(null)}
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex justify-between items-start group">
+                                      <span>{bullet}</span>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-2"
+                                        onClick={() => handleEdit(sectionId, bullet)}
+                                      >
+                                        Edit
+                                      </Button>
+                                    </div>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
                         </div>
-                      ) : (
-                        <p className="text-sm text-gray-700">{formatSkills(tailoredResume.skills)}</p>
-                      )}
+                      ))}
                     </div>
-                  )}
+
+                    {/* Education */}
+                    {tailoredResume.education && tailoredResume.education.length > 0 && (
+                      <div>
+                        <h3 className="font-bold mb-3">EDUCATION</h3>
+                        {tailoredResume.education.map((edu, eduIdx) => {
+                          const sectionId = `education-${eduIdx}`;
+                          return (
+                            <div key={eduIdx} className="mb-3">
+                              {editingSection === sectionId ? (
+                                <div className="space-y-2">
+                                  <Textarea
+                                    value={editText}
+                                    onChange={(e) => setEditText(e.target.value)}
+                                    className="min-h-[80px]"
+                                    placeholder="Edit education details..."
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button size="sm" onClick={handleSaveEdit}>
+                                      Save
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingSection(null)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="group">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <p className="font-semibold">{edu.degree} | {edu.school}</p>
+                                      <p className="text-sm text-gray-600">{edu.dates}</p>
+                                      {edu.details && <p className="text-sm mt-1">{edu.details}</p>}
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={() => handleEdit(sectionId, edu.details || `${edu.degree} at ${edu.school}`)}
+                                    >
+                                      Edit
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Skills */}
+                    {tailoredResume.skills && tailoredResume.skills.length > 0 && (
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-bold">SKILLS</h3>
+                          {editingSection !== 'skills' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEdit('skills', formatSkills(tailoredResume.skills))}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                        </div>
+                        {editingSection === 'skills' ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value)}
+                              className="min-h-[80px]"
+                              placeholder="Separate skills with • (bullet)"
+                            />
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={handleSaveEdit}>
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingSection(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm">{formatSkills(tailoredResume.skills)}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Download Buttons */}
+                    <div className="flex gap-3 pt-4 border-t">
+                      <Button onClick={() => handleDownload('docx')} className="flex-1">
+                        Download DOCX
+                      </Button>
+                      <Button onClick={() => handleDownload('pdf')} variant="outline" className="flex-1">
+                        Download PDF
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Empty state when no tailored resume yet (only in create mode) */}
+            {!isViewMode && !tailoredResume && (
+              <Card>
+                <CardContent className="py-12 text-center text-gray-500">
+                  Upload your resume and paste a job description to get started
                 </CardContent>
               </Card>
-
-              {/* Download Buttons */}
-              {currentApplicationId && (
-                <div className="flex gap-4">
-                  <Button
-                    onClick={() => handleDownload('docx')}
-                    className="flex-1"
-                  >
-                    Download DOCX
-                  </Button>
-                  <Button
-                    onClick={() => handleDownload('pdf')}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Download PDF
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+function Input({ type, accept, onChange, disabled, className }: any) {
+  return (
+    <input
+      type={type}
+      accept={accept}
+      onChange={onChange}
+      disabled={disabled}
+      className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ${className}`}
+    />
+  );
+}
+
 export default function RefinePage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
       <RefinePageContent />
     </Suspense>
   );
