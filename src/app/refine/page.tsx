@@ -184,7 +184,7 @@ function RefinePageContent() {
       const expIndex = parseInt(editingSection.split('-')[1]);
       updatedResume.experience[expIndex].bullets = editText.split('\n').filter(b => b.trim());
     } else if (editingSection === 'skills') {
-      updatedResume.skills = editText;
+      updatedResume.skills = editText.split('\n').filter(s => s.trim());
     }
 
     try {
